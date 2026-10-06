@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard | Buff Bison Construction</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+<div class="app">
+
+    <!-- ===== SIDEBAR ===== -->
+    <aside class="sidebar">
+        <div class="brand">
+            <img src="{{ url_for('static', filename='css/logo.png') }}" alt="Buff Bison Logo" class="logo-img">
+            <span class="brand-name">BUFF BISON</span>
+            <span class="brand-sub">CONSTRUCTION</span>
+        </div>
+
+        <nav class="nav">
+            <a href="/" class="nav-link active"><span class="icon">⌂</span> Dashboard</a>
+            <a href="{{ url_for('projects') }}" class="nav-link"><span class="icon">▣</span> Projects</a>
+            <a href="#" class="nav-link"><span class="icon">✎</span> Estimates</a>
+            <a href="#" class="nav-link"><span class="icon">$</span> Invoices</a>
+            <a href="#" class="nav-link"><span class="icon">▤</span> Job Costs</a>
+            <a href="#" class="nav-link"><span class="icon">▦</span> Schedule</a>
+            <a href="#" class="nav-link"><span class="icon">⚒</span> Subcontractors</a>
+            <a href="#" class="nav-link"><span class="icon">☺</span> Clients</a>
+            <a href="#" class="nav-link"><span class="icon">▭</span> Documents</a>
+            <a href="#" class="nav-link"><span class="icon">◙</span> Photos</a>
+        </nav>
+
+        <nav class="nav nav-bottom">
+            <a href="#" class="nav-link"><span class="icon">⚙</span> Settings</a>
+            <a href="{{ url_for('logout') }}" class="nav-link"><span class="icon">➜</span> Logout</a>
+        </nav>
+    </aside>
+
+    <!-- ===== MAIN CONTENT ===== -->
+    <div class="main">
+
+        <!-- Top header -->
+        <header class="header">
+            <div>
+                <h1>Dashboard</h1>
+                <p class="welcome">Welcome back, Daniel Carter</p>
+            </div>
+            <div class="header-right">
+                <input type="search" class="search" placeholder="Search projects, clients, invoices...">
+                <a href="#" class="btn">+ New Project</a>
+                <div class="profile">
+                    <span class="avatar">D</span>
+                    <span class="profile-name">Daniel Carter</span>
+                </div>
+            </div>
+        </header>
+
+        <main class="content">
+
+            <!-- Summary cards -->
+            <section class="cards">
+                <div class="card summary">
+                    <p class="summary-label">Active Projects</p>
+                    <p class="summary-value">8</p>
+                </div>
+                <div class="card summary">
+                    <p class="summary-label">Pending Estimates</p>
+                    <p class="summary-value">4</p>
+                </div>
+                <div class="card summary">
+                    <p class="summary-label">Unpaid Invoices</p>
+                    <p class="summary-value">$24,750</p>
+                </div>
+                <div class="card summary">
+                    <p class="summary-label">Upcoming Tasks</p>
+                    <p class="summary-value">6</p>
+                </div>
+            </section>
+
+            <div class="grid">
+
+                <!-- Active projects table -->
+                <section class="card">
+                    <h2>Active Projects</h2>
+                    <div class="table-wrap">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>Project</th>
+                                    <th>Client</th>
+                                    <th>Project Manager</th>
+                                    <th>Status</th>
+                                    <th>Budget</th>
+                                    <th>Progress</th>
+                                    <th>Due Date</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr>
+                                    <td>Kitchen Remodel – Oak Forest</td>
+                                    <td>Maria Hernandez</td>
+                                    <td>Daniel Carter</td>
+                                    <td><span class="status progress">In Progress</span></td>
+                                    <td>$68,500</td>
+                                    <td><div class="bar"><div class="bar-fill" style="width: 60%;"></div></div><span class="pct">60%</span></td>
+                                    <td>Nov 15, 2026</td>
+                                </tr>
+                                <tr>
+                                    <td>Roof Replacement – Katy</td>
+                                    <td>James Thompson</td>
+                                    <td>Carlos Reyes</td>
+                                    <td><span class="status near">Near Completion</span></td>
+                                    <td>$24,200</td>
+                                    <td><div class="bar"><div class="bar-fill" style="width: 90%;"></div></div><span class="pct">90%</span></td>
+                                    <td>Oct 12, 2026</td>
+                                </tr>
+                                <tr>
+                                    <td>Master Bath Addition – Sugar Land</td>
+                                    <td>Angela Brooks</td>
+                                    <td>Daniel Carter</td>
+                                    <td><span class="status planning">Planning</span></td>
+                                    <td>$41,000</td>
+                                    <td><div class="bar"><div class="bar-fill" style="width: 15%;"></div></div><span class="pct">15%</span></td>
+                                    <td>Jan 30, 2027</td>
+                                </tr>
+                                <tr>
+                                    <td>Storm Damage Repair – Cypress</td>
+                                    <td>Robert Nguyen</td>
+                                    <td>Carlos Reyes</td>
+                                    <td><span class="status progress">In Progress</span></td>
+                                    <td>$32,750</td>
+                                    <td><div class="bar"><div class="bar-fill" style="width: 45%;"></div></div><span class="pct">45%</span></td>
+                                    <td>Dec 05, 2026</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </section>
+
+                <!-- Right column -->
+                <div class="side-column">
+
+                    <section class="card">
+                        <h2>Upcoming Tasks</h2>
+                        <ul class="task-list">
+                            <li>
+                                <p class="task-name">Final roof inspection</p>
+                                <p class="task-meta">Roof Replacement – Katy · Oct 7</p>
+                            </li>
+                            <li>
+                                <p class="task-name">Order kitchen cabinets</p>
+                                <p class="task-meta">Kitchen Remodel – Oak Forest · Oct 9</p>
+                            </li>
+                            <li>
+                                <p class="task-name">Permit submission</p>
+                                <p class="task-meta">Master Bath Addition – Sugar Land · Oct 14</p>
+                            </li>
+                            <li>
+                                <p class="task-name">Drywall delivery</p>
+                                <p class="task-meta">Storm Damage Repair – Cypress · Oct 16</p>
+                            </li>
+                        </ul>
+                    </section>
+
+                    <section class="card">
+                        <h2>Recent Activity</h2>
+                        <ul class="activity-list">
+                            <li><span class="dot"></span>Invoice #1042 marked as paid <small>2 hours ago</small></li>
+                            <li><span class="dot"></span>Progress photos uploaded <small>Yesterday</small></li>
+                            <li><span class="dot"></span>New estimate created <small>Yesterday</small></li>
+                            <li><span class="dot"></span>Change order submitted <small>2 days ago</small></li>
+                        </ul>
+                    </section>
+
+                </div>
+            </div>
+        </main>
+    </div>
+</div>
+</body>
+</html>

@@ -1,0 +1,27 @@
+<!-- Shared sidebar. The page sets active_page before including this file. -->
+<aside class="sidebar">
+    <div class="brand">
+        <div class="logo-badge">
+            <img src="{{ url_for('static', filename='css/logo.png') }}"
+                 alt="Buff Bison Construction" class="logo-img">
+        </div>
+    </div>
+
+    <nav class="nav">
+        <a href="{{ url_for('dashboard') }}" class="nav-link {% if active_page == 'dashboard' %}active{% endif %}"><span class="icon">⌂</span> Dashboard</a>
+        <a href="{{ url_for('projects') }}" class="nav-link {% if active_page == 'projects' %}active{% endif %}"><span class="icon">▣</span> Projects</a>
+        <a href="#" class="nav-link"><span class="icon">✎</span> Estimates</a>
+        <a href="#" class="nav-link"><span class="icon">$</span> Invoices</a>
+        <a href="#" class="nav-link"><span class="icon">▤</span> Job Costs</a>
+        <a href="#" class="nav-link"><span class="icon">▦</span> Schedule</a>
+        <a href="#" class="nav-link"><span class="icon">⚒</span> Subcontractors</a>
+        <a href="#" class="nav-link"><span class="icon">☺</span> Clients</a>
+        <a href="#" class="nav-link"><span class="icon">▭</span> Documents</a>
+        <a href="#" class="nav-link"><span class="icon">◙</span> Photos</a>
+    </nav>
+
+    <nav class="nav nav-bottom">
+        <a href="#" class="nav-link"><span class="icon">⚙</span> Settings</a>
+        <a href="{{ url_for('logout') }}" class="nav-link"><span class="icon">➜</span> Logout</a>
+    </nav>
+</aside>

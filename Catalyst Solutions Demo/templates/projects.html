@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Projects | Buff Bison Construction</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+<div class="app">
+
+    <!-- ===== SIDEBAR ===== -->
+    {% set active_page = 'projects' %}
+    {% include '_sidebar.html' %}
+
+    <!-- ===== MAIN CONTENT ===== -->
+    <div class="main">
+
+        <header class="header">
+            <div>
+                <h1>Projects</h1>
+                <p class="welcome">Manage and track all construction projects</p>
+            </div>
+            <div class="header-right">
+                <a href="{{ url_for('new_project') }}" class="btn">+ New Project</a>
+                <div class="profile">
+                    <span class="avatar">{{ user_name[0] }}</span>
+                    <span class="profile-name">{{ user_name }}</span>
+                </div>
+            </div>
+        </header>
+
+        <main class="content">
+
+            <!-- Summary cards (sample values) -->
+            <section class="cards">
+                <div class="card summary">
+                    <p class="summary-label">Total Projects</p>
+                    <p class="summary-value">12</p>
+                </div>
+                <div class="card summary">
+                    <p class="summary-label">Active Projects</p>
+                    <p class="summary-value">8</p>
+                </div>
+                <div class="card summary">
+                    <p class="summary-label">Planning</p>
+                    <p class="summary-value">3</p>
+                </div>
+                <div class="card summary">
+                    <p class="summary-label">Completed</p>
+                    <p class="summary-value">1</p>
+                </div>
+            </section>
+
+            <!-- All projects table -->
+            <section class="card">
+
+                <div class="table-toolbar">
+                    <h2>All Projects</h2>
+                    <div class="filters">
+                        <input type="search" id="project-search" class="search"
+                               placeholder="Search projects or clients...">
+                        <label for="status-filter" class="filter-label">Status:</label>
+                        <select id="status-filter" class="filter-select">
+                            <option value="All">All</option>
+                            <option value="Planning">Planning</option>
+                            <option value="In Progress">In Progress</option>
+                            <option value="On Hold">On Hold</option>
+                            <option value="Completed">Completed</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="table-wrap">
+                    <table id="projects-table">
+                        <thead>
+                            <tr>
+                                <th>Project</th>
+                                <th>Client</th>
+                                <th>Project Manager</th>
+                                <th>Status</th>
+                                <th>Budget</th>
+                                <th>Actual Cost</th>
+                                <th>Progress</th>
+                                <th>Due Date</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr class="project-row" data-status="In Progress">
+                                <td>Riverstone Kitchen Remodel</td>
+                                <td>Sarah Johnson</td>
+                                <td>Daniel Carter</td>
+                                <td><span class="status progress">In Progress</span></td>
+                                <td>$48,500</td>
+                                <td>$31,200</td>
+                                <td><div class="bar"><div class="bar-fill" style="width: 65%;"></div></div><span class="pct">65%</span></td>
+                                <td>Nov 15, 2026</td>
+                                <td><a href="{{ url_for('project_details', project_id=1) }}" class="btn-outline">View</a></td>
+                            </tr>
+                            <tr class="project-row" data-status="In Progress">
+                                <td>Sugar Land Roof Replacement</td>
+                                <td>Michael Thompson</td>
+                                <td>Daniel Carter</td>
+                                <td><span class="status progress">In Progress</span></td>
+                                <td>$22,000</td>
+                                <td>$13,800</td>
+                                <td><div class="bar"><div class="bar-fill" style="width: 55%;"></div></div><span class="pct">55%</span></td>
+                                <td>Oct 28, 2026</td>
+                                <td><a href="{{ url_for('project_details', project_id=2) }}" class="btn-outline">View</a></td>
+                            </tr>
+                            <tr class="project-row" data-status="Planning">
+                                <td>Memorial Bathroom Renovation</td>
+                                <td>Emily Davis</td>
+                                <td>James Wilson</td>
+                                <td><span class="status planning">Planning</span></td>
+                                <td>$35,750</td>
+                                <td>$2,500</td>
+                                <td><div class="bar"><div class="bar-fill" style="width: 10%;"></div></div><span class="pct">10%</span></td>
+                                <td>Dec 12, 2026</td>
+                                <td><a href="{{ url_for('project_details', project_id=3) }}" class="btn-outline">View</a></td>
+                            </tr>
+                            <tr class="project-row" data-status="In Progress">
+                                <td>Katy Home Addition</td>
+                                <td>Robert Garcia</td>
+                                <td>James Wilson</td>
+                                <td><span class="status progress">In Progress</span></td>
+                                <td>$92,000</td>
+                                <td>$44,600</td>
+                                <td><div class="bar"><div class="bar-fill" style="width: 48%;"></div></div><span class="pct">48%</span></td>
+                                <td>Jan 20, 2027</td>
+                                <td><a href="{{ url_for('project_details', project_id=4) }}" class="btn-outline">View</a></td>
+                            </tr>
+
+                            <!-- Shown by projects.js when no rows match the filters -->
+                            <tr id="no-results" class="empty-row" style="display: none;">
+                                <td colspan="9">No projects match your search.</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+
+        </main>
+    </div>
+</div>
+
+<script src="{{ url_for('static', filename='js/projects.js') }}"></script>
+</body>
+</html>
