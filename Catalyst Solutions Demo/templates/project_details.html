@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Riverstone Kitchen Remodel | Buff Bison Construction</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+<div class="app">
+
+    <!-- ===== SIDEBAR ===== -->
+    {% set active_page = 'projects' %}
+    {% include '_sidebar.html' %}
+
+    <!-- ===== MAIN CONTENT ===== -->
+    <div class="main">
+
+        <header class="header">
+            <div>
+                <h1>Riverstone Kitchen Remodel</h1>
+                <p class="welcome">Sarah Johnson · Houston, TX</p>
+            </div>
+            <div class="header-right">
+                <a href="#" class="btn">Edit Project</a>
+                <div class="profile">
+                    <span class="avatar">{{ user_name[0] }}</span>
+                    <span class="profile-name">{{ user_name }}</span>
+                </div>
+            </div>
+        </header>
+
+        <main class="content">
+
+            <a href="{{ url_for('projects') }}" class="back-link">← Back to Projects</a>
+
+            <!-- Status, manager and dates -->
+            <section class="card project-meta">
+                <div class="meta-item">
+                    <small>Status</small>
+                    <span class="status progress">In Progress</span>
+                </div>
+                <div class="meta-item">
+                    <small>Project Manager</small>
+                    Daniel Carter
+                </div>
+                <div class="meta-item">
+                    <small>Start Date</small>
+                    Aug 20, 2026
+                </div>
+                <div class="meta-item">
+                    <small>Due Date</small>
+                    Nov 15, 2026
+                </div>
+            </section>
+
+            <!-- Project overview cards -->
+            <h2 class="section-heading">Project Overview</h2>
+            <section class="cards">
+                <div class="card summary">
+                    <p class="summary-label">Estimated Budget</p>
+                    <p class="summary-value">$48,500</p>
+                </div>
+                <div class="card summary">
+                    <p class="summary-label">Actual Cost</p>
+                    <p class="summary-value">$31,200</p>
+                </div>
+                <div class="card summary">
+                    <p class="summary-label">Remaining Budget</p>
+                    <p class="summary-value">$17,300</p>
+                </div>
+                <div class="card summary">
+                    <p class="summary-label">Project Progress</p>
+                    <p class="summary-value">65%</p>
+                    <div class="bar bar-wide"><div class="bar-fill" style="width: 65%;"></div></div>
+                </div>
+            </section>
+
+            <!-- Tabs (switched by project_details.js) -->
+            <div class="tabs">
+                <button type="button" class="tab active" data-tab="overview">Overview</button>
+                <button type="button" class="tab" data-tab="costs">Costs</button>
+                <button type="button" class="tab" data-tab="invoices">Invoices</button>
+                <button type="button" class="tab" data-tab="documents">Documents</button>
+                <button type="button" class="tab" data-tab="photos">Photos</button>
+                <button type="button" class="tab" data-tab="schedule">Schedule</button>
+                <button type="button" class="tab" data-tab="subcontractors">Subcontractors</button>
+            </div>
+
+            <!-- ===== OVERVIEW TAB (real content) ===== -->
+            <div id="tab-overview" class="tab-panel active">
+                <div class="grid">
+
+                    <!-- Left column -->
+                    <div class="side-column">
+
+                        <section class="card">
+                            <h2>Project Information</h2>
+                            <dl class="info-list">
+                                <dt>Project Type</dt>
+                                <dd>Kitchen Remodel</dd>
+                                <dt>Project Description</dt>
+                                <dd>Complete kitchen renovation including new cabinets, countertops, flooring, lighting, and appliance installation.</dd>
+                                <dt>Project Address</dt>
+                                <dd>1234 Riverstone Blvd, Houston, TX</dd>
+                            </dl>
+                        </section>
+
+                        <section class="card">
+                            <h2>Project Documents</h2>
+                            <ul class="doc-list">
+                                <li><span class="doc-tag">PDF</span> Approved Estimate.pdf</li>
+                                <li><span class="doc-tag">PDF</span> Contract.pdf</li>
+                                <li><span class="doc-tag">PDF</span> Kitchen Plans.pdf</li>
+                            </ul>
+                            <a href="#" class="text-link">View All Documents →</a>
+                        </section>
+
+                    </div>
+
+                    <!-- Right column -->
+                    <div class="side-column">
+
+                        <section class="card">
+                            <h2>Upcoming Tasks</h2>
+                            <ul class="task-list">
+                                <li>
+                                    <div class="task-row">
+                                        <div>
+                                            <p class="task-name">Cabinet Installation</p>
+                                            <p class="task-meta">Due: Oct 12, 2026</p>
+                                        </div>
+                                        <span class="status progress">In Progress</span>
+                                    </div>
+                                </li>
+                                <li>
+                                    <div class="task-row">
+                                        <div>
+                                            <p class="task-name">Countertop Measurement</p>
+                                            <p class="task-meta">Due: Oct 18, 2026</p>
+                                        </div>
+                                        <span class="status pending">Pending</span>
+                                    </div>
+                                </li>
+                                <li>
+                                    <div class="task-row">
+                                        <div>
+                                            <p class="task-name">Electrical Inspection</p>
+                                            <p class="task-meta">Due: Oct 24, 2026</p>
+                                        </div>
+                                        <span class="status pending">Pending</span>
+                                    </div>
+                                </li>
+                            </ul>
+                        </section>
+
+                        <section class="card">
+                            <h2>Recent Activity</h2>
+                            <ul class="activity-list">
+                                <li><span class="dot"></span>Progress photos uploaded <small>Oct 3, 2026</small></li>
+                                <li><span class="dot"></span>Invoice #1042 created <small>Oct 1, 2026</small></li>
+                                <li><span class="dot"></span>Receipt uploaded <small>Sep 29, 2026</small></li>
+                                <li><span class="dot"></span>Project status updated <small>Sep 25, 2026</small></li>
+                            </ul>
+                        </section>
+
+                    </div>
+                </div>
+            </div>
+
+            <!-- ===== PLACEHOLDER TABS (future development) ===== -->
+            <div id="tab-costs" class="tab-panel">
+                <section class="card placeholder">
+                    <h2>Costs</h2>
+                    <p>Coming soon: estimated vs. actual job costs for this project.</p>
+                </section>
+            </div>
+            <div id="tab-invoices" class="tab-panel">
+                <section class="card placeholder">
+                    <h2>Invoices</h2>
+                    <p>Coming soon: invoices and paid/unpaid status for this project.</p>
+                </section>
+            </div>
+            <div id="tab-documents" class="tab-panel">
+                <section class="card placeholder">
+                    <h2>Documents</h2>
+                    <p>Coming soon: receipts, contracts, and other files for this project.</p>
+                </section>
+            </div>
+            <div id="tab-photos" class="tab-panel">
+                <section class="card placeholder">
+                    <h2>Photos</h2>
+                    <p>Coming soon: project and progress photos.</p>
+                </section>
+            </div>
+            <div id="tab-schedule" class="tab-panel">
+                <section class="card placeholder">
+                    <h2>Schedule</h2>
+                    <p>Coming soon: tasks and due dates for this project.</p>
+                </section>
+            </div>
+            <div id="tab-subcontractors" class="tab-panel">
+                <section class="card placeholder">
+                    <h2>Subcontractors</h2>
+                    <p>Coming soon: subcontractors assigned to this project.</p>
+                </section>
+            </div>
+
+        </main>
+    </div>
+</div>
+
+<script src="{{ url_for('static', filename='js/project_details.js') }}"></script>
+</body>
+</html>
