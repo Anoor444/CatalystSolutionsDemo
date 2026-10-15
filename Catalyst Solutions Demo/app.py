@@ -73,5 +73,24 @@ def logout():
     return redirect(url_for("login"))
 
 
+@app.route("/subcontractors")
+def subcontractors():
+    if "user" not in session:
+        return redirect(url_for("login"))
+
+    return render_template("subcontractors.html", user_name=session["user"])
+
+@app.route("/subcontractors/new", methods=["GET", "POST"])
+def new_subcontractor():
+    if "user" not in session:
+        return redirect(url_for("login"))
+
+    if request.method == "POST":
+        # Nothing is saved yet. Later: insert the form data into MySQL here.
+        return redirect(url_for("subcontractors"))
+
+    return render_template("new_subcontractor.html", user_name=session["user"])
+
+
 if __name__ == "__main__":
     app.run(debug=True)

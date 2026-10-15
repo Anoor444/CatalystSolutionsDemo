@@ -1,10 +1,9 @@
 <!-- Shared sidebar. The page sets active_page before including this file. -->
 <aside class="sidebar">
     <div class="brand">
-        <div class="logo-badge">
-            <img src="{{ url_for('static', filename='css/logo.png') }}"
-                 alt="Buff Bison Construction" class="logo-img">
-        </div>
+        <img src="{{ url_for('static', filename='css/logo.png') }}" alt="Buff Bison Logo" class="logo-img">
+        <span class="brand-name">BUFF BISON</span>
+        <span class="brand-sub">CONSTRUCTION</span>
     </div>
 
     <nav class="nav">
@@ -14,7 +13,7 @@
         <a href="#" class="nav-link"><span class="icon">$</span> Invoices</a>
         <a href="#" class="nav-link"><span class="icon">▤</span> Job Costs</a>
         <a href="#" class="nav-link"><span class="icon">▦</span> Schedule</a>
-        <a href="#" class="nav-link"><span class="icon">⚒</span> Subcontractors</a>
+        <a href="{{ url_for('subcontractors') }}" class="nav-link {% if active_page == 'subcontractors' %}active{% endif %}"><span class="icon">⚒</span> Subcontractors</a>
         <a href="#" class="nav-link"><span class="icon">☺</span> Clients</a>
         <a href="#" class="nav-link"><span class="icon">▭</span> Documents</a>
         <a href="#" class="nav-link"><span class="icon">◙</span> Photos</a>
