@@ -169,28 +169,37 @@ function renderTable() {
     return [e.estimate_number, e.title, clientName(e.client_id)].some(v => v.toLowerCase().includes(q));
   });
 
+  if (rows.length === 0) {
+    $("#estimatesBody").innerHTML = `<tr class="empty-row"><td colspan="8">No estimates match your search.</td></tr>`;
+    return;
+  }
+
   $("#estimatesBody").innerHTML = rows.map(e => `
     <tr>
-      <td class="est-number">${escapeHtml(e.estimate_number)}</td>
-      <td class="job-title">${escapeHtml(e.title)}</td>
+      <td>${escapeHtml(e.title)}</td>
+      <td>${escapeHtml(e.estimate_number)}</td>
       <td>${escapeHtml(clientName(e.client_id))}</td>
       <td>${escapeHtml(userName(e.created_by))}</td>
-      <td class="nowrap">${formatDate(e.created_at)}</td>
-      <td><span class="badge badge-${e.status.toLowerCase()}">${e.status}</span></td>
+      <td>${formatDate(e.created_at)}</td>
+      <td>${statusBadge(e.status)}</td>
       <td class="num">${money(e.total_amount)}</td>
       <td>
         <div class="row-actions">
-          <button class="btn btn-outline btn-sm" data-action="open" data-id="${e.estimate_id}">
+          <button type="button" class="btn-outline" data-action="open" data-id="${e.estimate_id}">
             ${e.status === "Draft" ? "Edit" : "View"}
           </button>
           ${e.status === "Approved"
-            ? `<button class="btn btn-primary btn-sm" data-action="convert" data-id="${e.estimate_id}">Convert</button>`
+            ? `<button type="button" class="btn btn-sm" data-action="convert" data-id="${e.estimate_id}">Convert</button>`
             : ""}
         </div>
       </td>
     </tr>`).join("");
+}
 
-  $("#emptyState").hidden = rows.length > 0;
+// Reuses the badge colors already in style.css (.status.progress, .completed, .hold, .near)
+const STATUS_CLASS = { Draft: "draft", Sent: "progress", Approved: "completed", Rejected: "hold", Converted: "near" };
+function statusBadge(status) {
+  return `<span class="status ${STATUS_CLASS[status]}">${status}</span>`;
 }
 
 function refresh() { renderStats(); renderTable(); }
@@ -217,7 +226,7 @@ function openEstimate(id = null) {
 
   $("#estimateModalTitle").textContent = e ? `${e.estimate_number}` : "New Estimate";
   $("#estimateModalSub").innerHTML = e
-    ? `<span class="badge badge-${e.status.toLowerCase()}">${e.status}</span> &nbsp;Created ${formatDate(e.created_at)} by ${escapeHtml(userName(e.created_by))}`
+    ? `${statusBadge(e.status)} &nbsp;Created ${formatDate(e.created_at)} by ${escapeHtml(userName(e.created_by))}`
     : "Add a client, job title, and at least one line item.";
 
   fillSelect($("#estClient"), clients, "client_id", c => `${c.contact_first_name} ${c.contact_last_name}`, "Select a client…");
@@ -244,30 +253,30 @@ function renderFooter(e) {
   const status = e ? e.status : "New";
   const buttons = {
     New: `
-      <button type="button" class="btn btn-ghost" data-close>Cancel</button>
-      <button type="button" class="btn btn-outline" data-save="Draft">Save as Draft</button>
-      <button type="button" class="btn btn-primary" data-save="Sent">Save &amp; Send</button>`,
+      <button type="button" class="btn-outline" data-close>Cancel</button>
+      <button type="button" class="btn-outline" data-save="Draft">Save as Draft</button>
+      <button type="button" class="btn" data-save="Sent">Save &amp; Send</button>`,
     Draft: `
-      <button type="button" class="btn btn-danger" data-delete>Delete Draft</button>
+      <button type="button" class="btn-danger" data-delete>Delete Draft</button>
       <span class="spacer"></span>
-      <button type="button" class="btn btn-ghost" data-close>Cancel</button>
-      <button type="button" class="btn btn-outline" data-save="Draft">Save Draft</button>
-      <button type="button" class="btn btn-primary" data-save="Sent">Save &amp; Send</button>`,
+      <button type="button" class="btn-outline" data-close>Cancel</button>
+      <button type="button" class="btn-outline" data-save="Draft">Save Draft</button>
+      <button type="button" class="btn" data-save="Sent">Save &amp; Send</button>`,
     Sent: `
-      <button type="button" class="btn btn-danger" data-status="Rejected">Mark Rejected</button>
+      <button type="button" class="btn-danger" data-status="Rejected">Mark Rejected</button>
       <span class="spacer"></span>
-      <button type="button" class="btn btn-ghost" data-close>Close</button>
-      <button type="button" class="btn btn-outline" data-save="Sent">Save Changes</button>
-      <button type="button" class="btn btn-primary" data-status="Approved">Mark Approved</button>`,
+      <button type="button" class="btn-outline" data-close>Close</button>
+      <button type="button" class="btn-outline" data-save="Sent">Save Changes</button>
+      <button type="button" class="btn" data-status="Approved">Mark Approved</button>`,
     Approved: `
-      <button type="button" class="btn btn-ghost" data-close>Close</button>
-      <button type="button" class="btn btn-primary" data-convert>Convert to Project</button>`,
+      <button type="button" class="btn-outline" data-close>Close</button>
+      <button type="button" class="btn" data-convert>Convert to Project</button>`,
     Rejected: `
-      <button type="button" class="btn btn-ghost" data-close>Close</button>
-      <button type="button" class="btn btn-outline" data-status="Draft">Reopen as Draft</button>`,
+      <button type="button" class="btn-outline" data-close>Close</button>
+      <button type="button" class="btn-outline" data-status="Draft">Reopen as Draft</button>`,
     Converted: `
       <span class="modal-sub" style="margin-right:auto">Converted to project ${e && e.project_id ? "PRJ-" + e.project_id : ""}</span>
-      <button type="button" class="btn btn-ghost" data-close>Close</button>`,
+      <button type="button" class="btn-outline" data-close>Close</button>`,
   };
   f.innerHTML = buttons[status];
 }
@@ -276,15 +285,15 @@ function addLineRow(li = {}) {
   const tr = document.createElement("tr");
   const dis = readOnly ? "disabled" : "";
   tr.innerHTML = `
-    <td><select class="input select li-cat" ${dis}>
+    <td><select class="li-cat" ${dis}>
       <option value="">Category…</option>
       ${costCategories.map(c => `<option value="${c.category_id}">${escapeHtml(c.name)}</option>`).join("")}
     </select></td>
-    <td><input class="input li-desc" type="text" placeholder="Description" value="${escapeHtml(li.description ?? "")}" ${dis}></td>
-    <td><input class="input li-qty" type="number" min="0" step="any" value="${li.quantity ?? 1}" ${dis}></td>
-    <td><input class="input li-cost" type="number" min="0" step="0.01" value="${li.unit_cost ?? 0}" ${dis}></td>
+    <td><input class="li-desc" type="text" placeholder="Description" value="${escapeHtml(li.description ?? "")}" ${dis}></td>
+    <td><input class="li-qty" type="number" min="0" step="any" value="${li.quantity ?? 1}" ${dis}></td>
+    <td><input class="li-cost" type="number" min="0" step="0.01" value="${li.unit_cost ?? 0}" ${dis}></td>
     <td class="line-total">$0.00</td>
-    <td>${readOnly ? "" : `<button type="button" class="icon-btn remove-line" aria-label="Remove line">×</button>`}</td>`;
+    <td>${readOnly ? "" : `<button type="button" class="remove-line" aria-label="Remove line">×</button>`}</td>`;
   tr.querySelector(".li-cat").value = li.category_id ?? "";
   $("#lineItemsBody").appendChild(tr);
 }
