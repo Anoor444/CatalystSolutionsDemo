@@ -10,7 +10,7 @@
     <nav class="nav">
         <a href="{{ url_for('dashboard') }}" class="nav-link {% if active_page == 'dashboard' %}active{% endif %}"><span class="icon">⌂</span> Dashboard</a>
         <a href="{{ url_for('projects') }}" class="nav-link {% if active_page == 'projects' %}active{% endif %}"><span class="icon">▣</span> Projects</a>
-        <a href="#" class="nav-link"><span class="icon">✎</span> Estimates</a>
+        <a href="{{ url_for('estimates') }}" class="nav-link {% if active_page == 'estimates' %}active{% endif %}"><span class="icon">✎</span> Estimates</a>
         <a href="#" class="nav-link"><span class="icon">$</span> Invoices</a>
         <a href="#" class="nav-link"><span class="icon">▤</span> Job Costs</a>
         <a href="#" class="nav-link"><span class="icon">▦</span> Schedule</a>

@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Estimates | Buff Bison Construction</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/estimates.css') }}">
+</head>
+<body>
+<div class="app">
+
+    <!-- ===== SIDEBAR ===== -->
+    {% set active_page = 'estimates' %}
+    {% include "_sidebar.html" %}
+
+    <!-- ===== MAIN CONTENT ===== -->
+    <div class="main">
+
+        <!-- Top header -->
+        <header class="header">
+            <div>
+                <h1>Estimates</h1>
+                <p class="welcome">Create, send, and convert client estimates</p>
+            </div>
+            <div class="header-right">
+                <button type="button" class="btn" id="newEstimateBtn">+ New Estimate</button>
+                <div class="profile">
+                    <span class="avatar">{{ user_name[0] }}</span>
+                    <span class="profile-name">{{ user_name }}</span>
+                </div>
+            </div>
+        </header>
+
+        <main class="content">
+
+            <!-- Summary cards -->
+            <section class="cards">
+                <div class="card summary">
+                    <p class="summary-label">Total Estimates</p>
+                    <p class="summary-value" id="statTotal">0</p>
+                </div>
+                <div class="card summary">
+                    <p class="summary-label">Pending Approval</p>
+                    <p class="summary-value" id="statPending">0</p>
+                </div>
+                <div class="card summary">
+                    <p class="summary-label">Approved</p>
+                    <p class="summary-value" id="statApproved">0</p>
+                </div>
+                <div class="card summary">
+                    <p class="summary-label">Pending Value</p>
+                    <p class="summary-value" id="statPendingValue">$0</p>
+                </div>
+            </section>
+
+            <!-- Estimates table -->
+            <section class="card">
+                <div class="table-toolbar">
+                    <h2>All Estimates</h2>
+                    <div class="filters">
+                        <input type="text" id="searchInput" class="search" placeholder="Search estimates, clients, or jobs...">
+                        <label for="statusFilter" class="filter-label">Status:</label>
+                        <select id="statusFilter" class="filter-select">
+                            <option value="All">All</option>
+                            <option value="Draft">Draft</option>
+                            <option value="Sent">Sent</option>
+                            <option value="Approved">Approved</option>
+                            <option value="Rejected">Rejected</option>
+                            <option value="Converted">Converted</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="table-wrap">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Job Title</th>
+                                <th>Estimate #</th>
+                                <th>Client</th>
+                                <th>Created By</th>
+                                <th>Date</th>
+                                <th>Status</th>
+                                <th class="num">Total</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="estimatesBody"></tbody>
+                    </table>
+                </div>
+            </section>
+
+        </main>
+    </div>
+</div>
+
+<!-- ===== ESTIMATE MODAL (create / edit / view) ===== -->
+<div class="modal-backdrop" id="estimateModal" hidden>
+    <div class="modal modal-lg" role="dialog" aria-modal="true" aria-labelledby="estimateModalTitle">
+        <div class="modal-header">
+            <div>
+                <h2 id="estimateModalTitle">New Estimate</h2>
+                <p class="modal-sub" id="estimateModalSub"></p>
+            </div>
+            <button type="button" class="close-btn" data-close aria-label="Close">&times;</button>
+        </div>
+
+        <form id="estimateForm" novalidate>
+            <div class="modal-body">
+                <div class="form-grid">
+                    <div class="form-field">
+                        <label for="estClient">Client <span class="required">*</span></label>
+                        <select id="estClient" required></select>
+                    </div>
+                    <div class="form-field">
+                        <label for="estTitle">Job Title <span class="required">*</span></label>
+                        <input id="estTitle" type="text" placeholder="e.g. Kitchen Remodel – Oak Forest" required>
+                    </div>
+                </div>
+
+                <div class="line-items-header">
+                    <h3>Line Items</h3>
+                    <button type="button" class="btn-outline" id="addLineBtn">+ Add Line Item</button>
+                </div>
+
+                <div class="table-wrap">
+                    <table class="line-table">
+                        <thead>
+                            <tr>
+                                <th style="width:18%">Category</th>
+                                <th>Description</th>
+                                <th style="width:10%" class="num">Qty</th>
+                                <th style="width:14%" class="num">Unit Cost</th>
+                                <th style="width:14%" class="num">Line Total</th>
+                                <th style="width:40px"></th>
+                            </tr>
+                        </thead>
+                        <tbody id="lineItemsBody"></tbody>
+                    </table>
+                </div>
+
+                <div class="form-error" id="formError" hidden></div>
+
+                <div class="totals">
+                    <div class="totals-row"><span>Line items</span><span id="lineCount">0</span></div>
+                    <div class="totals-row grand"><span>Estimate Total</span><span id="estimateTotal">$0.00</span></div>
+                </div>
+            </div>
+
+            <div class="modal-footer form-actions" id="estimateFooter"></div>
+        </form>
+    </div>
+</div>
+
+<!-- ===== CONVERT TO PROJECT MODAL ===== -->
+<div class="modal-backdrop" id="convertModal" hidden>
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="convertTitle">
+        <div class="modal-header">
+            <div>
+                <h2 id="convertTitle">Convert to Project</h2>
+                <p class="modal-sub" id="convertSub"></p>
+            </div>
+            <button type="button" class="close-btn" data-close aria-label="Close">&times;</button>
+        </div>
+
+        <form id="convertForm" novalidate>
+            <div class="modal-body">
+                <div class="convert-summary" id="convertSummary"></div>
+                <div class="form-grid">
+                    <div class="form-field full">
+                        <label for="projName">Project Name <span class="required">*</span></label>
+                        <input id="projName" type="text" required>
+                    </div>
+                    <div class="form-field">
+                        <label for="projManager">Project Manager <span class="required">*</span></label>
+                        <select id="projManager" required></select>
+                    </div>
+                    <div class="form-field">
+                        <label for="projBudget">Budget <span class="required">*</span></label>
+                        <input id="projBudget" type="number" min="0" step="0.01" required>
+                    </div>
+                    <div class="form-field">
+                        <label for="projStart">Start Date</label>
+                        <input id="projStart" type="date">
+                    </div>
+                    <div class="form-field">
+                        <label for="projDue">Due Date <span class="required">*</span></label>
+                        <input id="projDue" type="date" required>
+                    </div>
+                </div>
+                <div class="form-error" id="convertError" hidden></div>
+            </div>
+            <div class="modal-footer form-actions">
+                <button type="button" class="btn-outline" data-close>Cancel</button>
+                <button type="submit" class="btn">Create Project</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="toast" id="toast" hidden></div>
+
+<script src="{{ url_for('static', filename='js/estimates.js') }}"></script>
+</body>
+</html>
