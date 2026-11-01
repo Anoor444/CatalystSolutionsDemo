@@ -379,6 +379,13 @@ def projects():
         )
     return render_template("projects.html", user_name=session["user"])
 
+@app.route("/estimates")
+def estimates():
+    if "user" not in session:
+        return redirect(url_for("login"))
+
+    return render_template("estimates.html", user_name=session["user"])
+
 
 @app.route("/client/my-projects")
 @role_required("client")
