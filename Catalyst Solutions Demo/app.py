@@ -1,5 +1,6 @@
 # cd "Catalyst Solutions Demo"; python app.py
 from flask import Flask, render_template, request, redirect, url_for, session
+from demo_data import get_job_cost_data, get_schedule_data
 
 app = Flask(__name__)
 
@@ -78,6 +79,20 @@ def project_details(project_id):
 def logout():
     session.clear()
     return redirect(url_for("login"))
+
+
+@app.route("/job-costs")
+def job_costs():
+    if "user" not in session:
+        return redirect(url_for("login"))
+    return render_template("job_costs.html", user_name=session["user"], job_cost_data=get_job_cost_data())
+
+
+@app.route("/schedule")
+def schedule():
+    if "user" not in session:
+        return redirect(url_for("login"))
+    return render_template("schedule.html", user_name=session["user"], schedule_data=get_schedule_data())
 
 
 if __name__ == "__main__":
