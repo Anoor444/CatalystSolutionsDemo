@@ -9,9 +9,8 @@
 <body>
 <div class="app">
 
-       <!-- ===== SIDEBAR ===== -->
     {% set active_page = 'dashboard' %}
-    {% include "_sidebar.html" %}
+    {% include '_sidebar.html' %}
 
     <!-- ===== MAIN CONTENT ===== -->
     <div class="main">
@@ -20,14 +19,14 @@
         <header class="header">
             <div>
                 <h1>Dashboard</h1>
-                <p class="welcome">Welcome back, Daniel Carter</p>
+                <p class="welcome">Welcome back, {{ user_name }}</p>
             </div>
             <div class="header-right">
                 <input type="search" class="search" placeholder="Search projects, clients, invoices...">
-                <a href="#" class="btn">+ New Project</a>
+                {% if current_role == 'employee' %}<a href="{{ url_for('new_project') }}" class="btn">+ New Project</a>{% endif %}
                 <div class="profile">
-                    <span class="avatar">D</span>
-                    <span class="profile-name">Daniel Carter</span>
+                    <span class="avatar">{{ user_name[0] }}</span>
+                    <span class="profile-name">{{ user_name }}</span>
                 </div>
             </div>
         </header>

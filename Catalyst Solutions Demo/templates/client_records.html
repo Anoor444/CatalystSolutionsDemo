@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ page_title }} | Buff Bison Construction</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+<div class="app">
+    {% include '_sidebar.html' %}
+
+    <div class="main">
+        <header class="header">
+            <div>
+                <h1>{{ page_title }}</h1>
+                <p class="welcome">{{ page_description }}</p>
+            </div>
+            <div class="header-right">
+                <div class="profile">
+                    <span class="avatar">{{ user_name[0] }}</span>
+                    <span class="profile-name">{{ user_name }}</span>
+                </div>
+            </div>
+        </header>
+
+        <main class="content">
+            <section class="card">
+                <h2>{{ records_label }}</h2>
+                <div class="table-wrap">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>{{ first_column }}</th>
+                                <th>Project</th>
+                                <th>Date</th>
+                                <th>Amount</th>
+                                <th>Status</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for record in records %}
+                            <tr>
+                                <td>{{ record[first_value] }}</td>
+                                <td>{{ record.project }}</td>
+                                <td>{{ record.date }}</td>
+                                <td>{{ record.amount }}</td>
+                                <td>{{ record.status }}</td>
+                            </tr>
+                            {% else %}
+                            <tr>
+                                <td colspan="5">No {{ page_title|lower }} are available.</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+        </main>
+    </div>
+</div>
+</body>
+</html>

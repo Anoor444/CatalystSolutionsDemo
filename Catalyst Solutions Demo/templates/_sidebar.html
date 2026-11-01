@@ -1,27 +1,46 @@
 <!-- Shared sidebar. The page sets active_page before including this file. -->
+{% if current_role == 'subcontractor' %}
+{% include '_subcontractor_sidebar.html' %}
+{% else %}
 <aside class="sidebar">
     <div class="brand">
-        <div class="logo-badge">
-            <img src="{{ url_for('static', filename='css/logo.png') }}"
-                 alt="Buff Bison Construction" class="logo-img">
-        </div>
+        <img src="{{ url_for('static', filename='css/logo.png') }}" alt="Buff Bison Logo" class="logo-img">
+        <span class="brand-name">BUFF BISON</span>
+        <span class="brand-sub">CONSTRUCTION</span>
     </div>
 
     <nav class="nav">
+        {% if current_role == 'client' %}
         <a href="{{ url_for('dashboard') }}" class="nav-link {% if active_page == 'dashboard' %}active{% endif %}"><span class="icon">⌂</span> Dashboard</a>
+        <a href="{{ url_for('client_my_projects') }}" class="nav-link {% if active_page == 'projects' %}active{% endif %}"><span class="icon">▣</span> My Projects</a>
+        <a href="{{ url_for('client_estimates') }}" class="nav-link {% if active_page == 'estimates' %}active{% endif %}"><span class="icon">✎</span> Estimates</a>
+        <a href="{{ url_for('client_invoices') }}" class="nav-link {% if active_page == 'invoices' %}active{% endif %}"><span class="icon">$</span> Invoices</a>
+        {% else %}
+        {% if current_role == 'employee' %}
+        <a href="{{ url_for('dashboard') }}" class="nav-link {% if active_page == 'dashboard' %}active{% endif %}"><span class="icon">⌂</span> Dashboard</a>
+        {% endif %}
         <a href="{{ url_for('projects') }}" class="nav-link {% if active_page == 'projects' %}active{% endif %}"><span class="icon">▣</span> Projects</a>
-        <a href="{{ url_for('estimates') }}" class="nav-link {% if active_page == 'estimates' %}active{% endif %}"><span class="icon">✎</span> Estimates</a>
+        {% if current_role == 'employee' %}
+        <a href="#" class="nav-link"><span class="icon">✎</span> Estimates</a>
         <a href="#" class="nav-link"><span class="icon">$</span> Invoices</a>
-        <a href="{{ url_for('job_costs') }}" class="nav-link {% if active_page == 'job_costs' %}active{% endif %}"><span class="icon">▤</span> Job Costs</a>
-        <a href="{{ url_for('schedule') }}" class="nav-link {% if active_page == 'schedule' %}active{% endif %}"><span class="icon">▦</span> Schedule</a>
-        <a href="#" class="nav-link"><span class="icon">⚒</span> Subcontractors</a>
-        <a href="#" class="nav-link"><span class="icon">☺</span> Clients</a>
-        <a href="#" class="nav-link"><span class="icon">▭</span> Documents</a>
-        <a href="#" class="nav-link"><span class="icon">◙</span> Photos</a>
+        <a href="#" class="nav-link"><span class="icon">▤</span> Job Costs</a>
+        <a href="#" class="nav-link"><span class="icon">▦</span> Schedule</a>
+        <a href="{{ url_for('subcontractors') }}" class="nav-link {% if active_page == 'subcontractors' %}active{% endif %}"><span class="icon">⚒</span> Subcontractors</a>
+        <a href="{{ url_for('clients') }}" class="nav-link {% if active_page == 'clients' %}active{% endif %}"><span class="icon">☺</span> Clients</a>
+        {% endif %}
+        <a href="{{ url_for('documents') }}" class="nav-link {% if active_page == 'documents' %}active{% endif %}"><span class="icon">▭</span> Documents</a>
+        <a href="{{ url_for('photos') }}" class="nav-link {% if active_page == 'photos' %}active{% endif %}"><span class="icon">◙</span> Photos</a>
+        {% endif %}
     </nav>
 
     <nav class="nav nav-bottom">
-        <a href="#" class="nav-link"><span class="icon">⚙</span> Settings</a>
-        <a href="{{ url_for('logout') }}" class="nav-link"><span class="icon">➜</span> Logout</a>
+        {% if current_role in ('employee', 'client') %}
+        <a href="{{ url_for('settings') }}" class="nav-link {% if active_page == 'settings' %}active{% endif %}"><span class="icon">⚙</span> Settings</a>
+        {% endif %}
+        <form method="POST" action="{{ url_for('logout') }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <button type="submit" class="nav-link logout-button"><span class="icon">➜</span> Logout</button>
+        </form>
     </nav>
 </aside>
+{% endif %}

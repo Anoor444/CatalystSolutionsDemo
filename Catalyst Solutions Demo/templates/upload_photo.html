@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Upload Photo | Buff Bison Construction</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+<div class="app">
+    {% set active_page = 'photos' %}
+    {% include '_sidebar.html' %}
+
+    <div class="main">
+        <header class="header">
+            <div>
+                <h1>Upload Photo</h1>
+                <p class="welcome">Add a photo to your project gallery.</p>
+            </div>
+            <div class="header-right">
+                <div class="profile">
+                    <span class="avatar">{{ user_name[0] }}</span>
+                    <span class="profile-name">{{ user_name }}</span>
+                </div>
+            </div>
+        </header>
+
+        <main class="content">
+            <form method="POST" action="{{ url_for('upload_photo') }}"
+                  enctype="multipart/form-data" class="form-page">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <section class="card form-section">
+                    <h2>Photo Information</h2>
+                    {% if error %}
+                        <p class="form-error" role="alert">{{ error }}</p>
+                    {% endif %}
+                    <div class="form-grid">
+                        <div class="form-field full">
+                            <label for="photo">Photo File <span class="required">*</span></label>
+                            <input type="file" id="photo" name="photo"
+                                   accept=".jpg,.jpeg,.png,.gif,.webp" required>
+                            <small class="form-help">JPG, PNG, GIF, or WebP; maximum file size is 16 MB.</small>
+                        </div>
+                        <div class="form-field">
+                            <label for="title">Photo Title <span class="required">*</span></label>
+                            <input type="text" id="title" name="title" required maxlength="120"
+                                   value="{{ request.form.get('title', '') }}"
+                                   placeholder="e.g. Kitchen progress">
+                        </div>
+                        <div class="form-field">
+                            <label for="project_name">Associated Project</label>
+                            <input type="text" id="project_name" name="project_name" maxlength="120"
+                                   value="{{ request.form.get('project_name', '') }}"
+                                   placeholder="Enter project name">
+                        </div>
+                    </div>
+                </section>
+
+                <div class="form-actions">
+                    <a href="{{ url_for('photos') }}" class="btn-outline">Cancel</a>
+                    <button type="submit" class="btn">Upload Photo</button>
+                </div>
+            </form>
+        </main>
+    </div>
+</div>
+</body>
+</html>

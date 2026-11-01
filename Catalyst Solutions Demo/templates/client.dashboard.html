@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Client Dashboard | Buff Bison Construction</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+<div class="app">
+    {% set active_page = 'dashboard' %}
+    {% include '_sidebar.html' %}
+
+    <div class="main">
+        <header class="header">
+            <div>
+                <h1>Dashboard</h1>
+                <p class="welcome">Welcome back, {{ user_name }}</p>
+            </div>
+            <div class="header-right">
+                <div class="profile">
+                    <span class="avatar">{{ user_name[0] }}</span>
+                    <span class="profile-name">{{ user_name }}</span>
+                </div>
+            </div>
+        </header>
+
+        <main class="content">
+            <section class="card client-dashboard-intro">
+                <p>View your project progress, review estimates, and check invoice status.</p>
+                <a href="{{ url_for('client_my_projects') }}" class="btn">View My Projects</a>
+            </section>
+
+            <section class="cards">
+                <a href="{{ url_for('client_my_projects') }}" class="card summary">
+                    <p class="summary-label">My Projects</p>
+                    <p class="summary-value">{{ projects|length }}</p>
+                </a>
+                <a href="{{ url_for('client_estimates') }}" class="card summary">
+                    <p class="summary-label">Estimates to Review</p>
+                    <p class="summary-value">{{ pending_estimates|length }}</p>
+                </a>
+                <a href="{{ url_for('client_invoices') }}" class="card summary">
+                    <p class="summary-label">Open Invoices</p>
+                    <p class="summary-value">{{ open_invoices|length }}</p>
+                </a>
+            </section>
+
+            <div class="grid">
+                <section class="card">
+                    <h2>Project Progress</h2>
+                    <div class="table-wrap">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>Project</th>
+                                    <th>Status</th>
+                                    <th>Progress</th>
+                                    <th>Target Date</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for project in projects %}
+                                <tr>
+                                    <td>{{ project.project }}</td>
+                                    <td><span class="status {% if project.status == 'Planning' %}planning{% else %}progress{% endif %}">{{ project.status }}</span></td>
+                                    <td>
+                                        <div class="bar"><div class="bar-fill" style="width: {{ project.progress }}%;"></div></div>
+                                        <span class="pct">{{ project.progress }}%</span>
+                                    </td>
+                                    <td>{{ project.due_date }}</td>
+                                </tr>
+                                {% else %}
+                                <tr><td colspan="4">No projects are available.</td></tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </section>
+
+                <section class="card">
+                    <h2>Needs Your Attention</h2>
+                    <ul class="task-list">
+                        {% for estimate in pending_estimates %}
+                        <li>
+                            <p class="task-name">{{ estimate.estimate }}</p>
+                            <p class="task-meta">{{ estimate.project }} - {{ estimate.amount }}</p>
+                            <a href="{{ url_for('client_estimates') }}" class="btn-outline">Review estimates</a>
+                        </li>
+                        {% endfor %}
+                        {% for invoice in open_invoices %}
+                        <li>
+                            <p class="task-name">{{ invoice.invoice }}</p>
+                            <p class="task-meta">{{ invoice.project }} - {{ invoice.amount }} - {{ invoice.status }}</p>
+                            <a href="{{ url_for('client_invoices') }}" class="btn-outline">View invoices</a>
+                        </li>
+                        {% endfor %}
+                        {% if not pending_estimates and not open_invoices %}
+                        <li><p class="task-meta">You have no estimates or invoices to review.</p></li>
+                        {% endif %}
+                    </ul>
+                </section>
+            </div>
+        </main>
+    </div>
+</div>
+</body>
+</html>

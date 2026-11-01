@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Settings | Buff Bison Construction</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+<div class="app">
+
+    <!-- ===== SIDEBAR (shared file) ===== -->
+    {% set active_page = 'settings' %}
+    {% include '_sidebar.html' %}
+
+    <!-- ===== MAIN CONTENT ===== -->
+    <div class="main">
+
+        <header class="header">
+            <div>
+                <h1>Settings</h1>
+                <p class="welcome">Manage your account information and preferences.</p>
+            </div>
+            <div class="header-right">
+                <div class="profile">
+                    <span class="avatar">{{ user_name[0] }}</span>
+                    <span class="profile-name">{{ user_name }}</span>
+                </div>
+            </div>
+        </header>
+
+        <main class="content">
+            <div class="form-page">
+
+                <!-- Profile information (read-only) -->
+                <section class="card form-section">
+                    <h2>Profile Information</h2>
+                    <dl class="info-list">
+                        <dt>Full Name</dt>
+                        <dd>{{ user_name }}</dd>
+                        <dt>Email Address</dt>
+                        <!-- Sample value: the login does not store an email yet -->
+                        <dd>{{ session.get('email', '') }}</dd>
+                        <dt>User Role</dt>
+                        <!-- Sample value: roles are not built yet -->
+                        <dd>{{ current_role|capitalize }}</dd>
+                    </dl>
+                </section>
+
+                <!-- Account settings -->
+                <section class="card form-section">
+                    <h2>Account Settings</h2>
+                    <dl class="info-list">
+                        <dt>Password</dt>
+                        <dd>********</dd>
+                        <dt>Account Status</dt>
+                        <dd><span class="status completed">Active</span></dd>
+                    </dl>
+                    <!-- PLACEHOLDER: disabled, password changes are not built yet -->
+                    <button type="button" class="btn" disabled
+                            title="Coming soon: password changes are not built yet">Change Password</button>
+                </section>
+
+            </div>
+        </main>
+    </div>
+</div>
+</body>
+</html>

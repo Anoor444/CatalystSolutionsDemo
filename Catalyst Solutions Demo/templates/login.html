@@ -18,6 +18,23 @@
 
         <h1>Sign In</h1>
         <p class="login-subtitle">Project Management Portal</p>
+        <p class="login-notice">
+            <strong>Employee demo</strong><br>
+            Email: <strong>demo@buffbison.com</strong><br>
+            Password: <strong>Buffbison123</strong>
+        </p>
+        <p class="login-notice">
+            <strong>Client demo</strong><br>
+            Email: <strong>demo.client@buffbison.com</strong><br>
+            Password: <strong>ClientDemo123!</strong><br>
+            <small>Demo account only; do not use in production.</small>
+        </p>
+
+        <p class="login-notice">
+            <strong>Subcontractor demo</strong><br>
+            Email: <strong>demo.subcontractor@buffbison.com</strong><br>
+            Password: <strong>SubcontractorDemo123!</strong>
+        </p>
 
         <!-- Error message (only shown after a failed login) -->
         {% if error %}
@@ -25,17 +42,37 @@
         {% endif %}
 
         <form method="POST" action="{{ url_for('login') }}">
-            <label for="username">Username</label>
-            <input type="text" id="username" name="username" required autofocus>
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <label for="email">Email Address</label>
+            <input type="email" id="email" name="email" autocomplete="username" required autofocus>
 
             <label for="password">Password</label>
-            <input type="password" id="password" name="password" required>
+            <div class="password-input-wrap">
+                <input type="password" id="password" name="password" autocomplete="current-password" required>
+                <button type="button" class="password-toggle" aria-label="Show password" aria-pressed="false">
+                    <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                        <path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7-10-7-10-7Z"></path>
+                        <circle cx="12" cy="12" r="3"></circle>
+                    </svg>
+                </button>
+            </div>
 
             <button type="submit" class="btn login-btn">Sign In</button>
-            <a href="#" class="forgot-password">Forgot Password?</a>
+            <a href="{{ url_for('forgot_password') }}" class="forgot-password">Forgot Password?</a>
         </form>
 
     </main>
 
+    <script>
+        const passwordInput = document.getElementById("password");
+        const passwordToggle = document.querySelector(".password-toggle");
+
+        passwordToggle.addEventListener("click", function () {
+            const showingPassword = passwordInput.type === "password";
+            passwordInput.type = showingPassword ? "text" : "password";
+            passwordToggle.setAttribute("aria-label", showingPassword ? "Hide password" : "Show password");
+            passwordToggle.setAttribute("aria-pressed", String(showingPassword));
+        });
+    </script>
 </body>
 </html>

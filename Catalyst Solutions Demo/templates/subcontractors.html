@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Subcontractors | Buff Bison Construction</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+<div class="app">
+
+    <!-- ===== SIDEBAR (shared file) ===== -->
+    {% set active_page = 'subcontractors' %}
+    {% include '_sidebar.html' %}
+
+    <!-- ===== MAIN CONTENT ===== -->
+    <div class="main">
+
+        <header class="header">
+            <div>
+                <h1>Subcontractors</h1>
+                <p class="welcome">Manage subcontractors and project assignments.</p>
+            </div>
+            <div class="header-right">
+                <!-- PLACEHOLDER: the Add Subcontractor form is not built yet -->
+                <a href="{{ url_for('new_subcontractor') }}" class="btn">+ Add Subcontractor</a>
+                <div class="profile">
+                    <span class="avatar">{{ user_name[0] }}</span>
+                    <span class="profile-name">{{ user_name }}</span>
+                </div>
+            </div>
+        </header>
+
+        <main class="content">
+
+            <section class="card">
+
+                <div class="table-toolbar">
+                    <h2>All Subcontractors</h2>
+                    <div class="filters">
+                        <input type="search" id="sub-search" class="search"
+                               placeholder="Search subcontractors...">
+                    </div>
+                </div>
+
+                <div class="table-wrap">
+                    <table id="subs-table">
+                        <thead>
+                            <tr>
+                                <th>Subcontractor Name</th>
+                                <th>Company</th>
+                                <th>Trade/Specialty</th>
+                                <th>Assigned Projects</th>
+                                <th>Status</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <!-- Static sample data (fictional) -->
+                            <tr class="sub-row">
+                                <td>John Miller</td>
+                                <td>Miller Electrical Services</td>
+                                <td>Electrical</td>
+                                <td>2</td>
+                                <td><span class="status completed">Active</span></td>
+                            </tr>
+                            <tr class="sub-row">
+                                <td>Carlos Rodriguez</td>
+                                <td>Rodriguez Plumbing LLC</td>
+                                <td>Plumbing</td>
+                                <td>1</td>
+                                <td><span class="status completed">Active</span></td>
+                            </tr>
+                            <tr class="sub-row">
+                                <td>David Thompson</td>
+                                <td>Thompson Roofing</td>
+                                <td>Roofing</td>
+                                <td>1</td>
+                                <td><span class="status planning">Inactive</span></td>
+                            </tr>
+
+                            <!-- Shown by the script below when nothing matches the search -->
+                            <tr id="no-results" class="empty-row" style="display: none;">
+                                <td colspan="5">No subcontractors match your search.</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+
+        </main>
+    </div>
+</div>
+
+<!-- Simple search filter: hides rows that do not contain the typed text -->
+<script>
+    const searchBox = document.getElementById("sub-search");
+    const rows = document.querySelectorAll("#subs-table tr.sub-row");
+    const noResults = document.getElementById("no-results");
+
+    searchBox.addEventListener("input", function () {
+        const text = searchBox.value.toLowerCase();
+        let visible = 0;
+
+        rows.forEach(function (row) {
+            const matches = row.textContent.toLowerCase().includes(text);
+            row.style.display = matches ? "" : "none";
+            if (matches) visible++;
+        });
+
+        noResults.style.display = visible === 0 ? "" : "none";
+    });
+</script>
+</body>
+</html>
