@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ assignment.project }} | Buff Bison Construction</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+<div class="app">
+    {% set active_page = 'projects' %}
+    {% include '_sidebar.html' %}
+    <div class="main">
+        <header class="header">
+            <div>
+                <h1>{{ assignment.project }}</h1>
+                <p class="welcome">{% if current_role == 'subcontractor' %}Assigned project details{% else %}{{ client_project_name }} &middot; Project assignment{% endif %}</p>
+            </div>
+            <div class="header-right">
+                <div class="profile">
+                    <span class="avatar">{{ user_name[0] }}</span>
+                    <span class="profile-name">{{ user_name }}</span>
+                </div>
+            </div>
+        </header>
+        <main class="content">
+            <a href="{{ url_for('projects') if current_role == 'subcontractor' else url_for('client_my_projects') }}" class="back-link">&larr; Back to {{ 'My Projects' if current_role == 'subcontractor' else 'Project Assignments' }}</a>
+            <section class="card project-meta">
+                <div class="meta-item">
+                    <small>Project</small>
+                    {{ assignment.project if current_role == 'subcontractor' else client_project_name }}
+                </div>
+                <div class="meta-item">
+                    <small>Assignment Status</small>
+                    <span class="status {{ 'planning' if assignment.status == 'Planning' else 'progress' }}">{{ assignment.status }}</span>
+                </div>
+                <div class="meta-item">
+                    <small>Target Date</small>
+                    {{ assignment.due_date }}
+                </div>
+            </section>
+            <section class="card summary">
+                <p class="summary-label">Assignment Progress</p>
+                <p class="summary-value">{{ assignment.progress }}%</p>
+                <div class="bar bar-wide"><div class="bar-fill" style="width: {{ assignment.progress }}%;"></div></div>
+            </section>
+        </main>
+    </div>
+</div>
+</body>
+</html>

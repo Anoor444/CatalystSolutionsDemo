@@ -1,3 +1,24 @@
+/* Directory pages */
+.directory-summary {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 16px;
+    margin-bottom: 24px;
+}
+.filters.directory-filters { align-items: flex-end; margin-bottom: 12px; }
+.directory-filters label { display: flex; flex-direction: column; gap: 6px; font-size: 13px; }
+.directory-filters .search,
+.directory-filters .filter-select { max-width: 100%; }
+.directory-count { color: var(--muted); font-size: 13px; margin-bottom: 12px; }
+[data-directory-empty] td { text-align: center; white-space: normal; padding: 24px; }
+[data-directory] [hidden] { display: none !important; }
+@media (max-width: 600px) {
+    .directory-summary { grid-template-columns: 1fr; }
+    .directory-filters label { width: 100%; }
+    .directory-filters .search,
+    .directory-filters .filter-select { width: 100%; }
+}
+
 /* ==========================================================
    1. GENERAL STYLES
    ========================================================== */
@@ -964,4 +985,284 @@ button.btn:disabled:hover {
     .sidebar > .nav:not(.nav-bottom) {
         margin-bottom: 0;
     }
+}
+
+/* ========================================
+   JOB COSTS + SCHEDULE PAGES
+   (paste at the very bottom of style.css)
+   Reuses the existing colors (--copper, --navy, --border, --muted)
+   and existing classes (.card, .summary, .btn, .btn-outline, .status,
+   .form-grid, .form-field, .table-toolbar, .filter-select).
+   Every class below is new, so existing pages are not affected.
+   ======================================== */
+
+/* Colors for over / under / on budget */
+:root {
+    --over: #a12a2a;
+    --over-bg: #fbeaea;
+    --under: #2b6a3a;
+    --under-bg: #e3f1e6;
+    --on: #243a6b;
+    --on-bg: #e6ebf5;
+}
+
+/* Yellow "demo data" banner */
+.demo-notice {
+    background: #fdf6ec;
+    border-left: 4px solid var(--copper);
+    border-radius: 4px;
+    padding: 10px 14px;
+    margin-bottom: 20px;
+    font-size: 14px;
+}
+
+/* Small grey line under a summary value */
+.summary-note {
+    color: var(--muted);
+    font-size: 13px;
+    margin-top: 4px;
+}
+
+/* Money values are long, so make them a little smaller than 32px */
+.jc-page .summary-value { font-size: 26px; }
+.jc-page .summary-status { font-size: 22px; }
+
+/* Summary card highlights (text also says "Over Budget", so not color alone) */
+.summary--over { border-top-color: var(--over); background: var(--over-bg); }
+.summary--over .summary-value { color: var(--over); }
+.summary--under { border-top-color: var(--under); }
+.summary--under .summary-value { color: var(--under); }
+.summary--on { border-top-color: var(--on); }
+.summary--on .summary-value { color: var(--on); }
+
+.section-gap { margin-bottom: 24px; }
+
+.help-text {
+    color: var(--muted);
+    font-size: 13px;
+    margin: -8px 0 14px;
+}
+
+/* Budget / overdue badges (same shape as the existing .status badges) */
+.status.over  { background: var(--over-bg); color: var(--over); border: 1px solid var(--over); }
+.status.under { background: var(--under-bg); color: var(--under); }
+.status.on    { background: var(--on-bg); color: var(--on); }
+
+/* ---------- Tables ---------- */
+.num { text-align: right; }
+
+.row-over td { background: var(--over-bg); }
+.row-over td:first-child { box-shadow: inset 4px 0 0 var(--over); }
+
+.total-row td {
+    border-top: 2px solid var(--navy);
+    font-weight: bold;
+}
+
+.muted { color: var(--muted); }
+
+.muted-tag {
+    display: block;
+    color: var(--muted);
+    font-size: 12px;
+}
+
+.actions-cell .btn-outline + .btn-outline { margin-left: 6px; }
+
+/* Expense table: the date column should not be bold */
+.jc-expense-table td:first-child {
+    font-weight: normal;
+    min-width: 0;
+    white-space: nowrap;
+}
+
+.jc-expense-table td:nth-child(2) {
+    white-space: normal;
+    min-width: 200px;
+}
+
+/* Green message after saving or deleting */
+.status-message {
+    background: var(--under-bg);
+    color: var(--under);
+    font-weight: bold;
+    font-size: 14px;
+    padding: 8px 12px;
+    border-radius: 4px;
+    margin-bottom: 12px;
+}
+.status-message:empty { display: none; }
+
+/* ---------- Buttons ---------- */
+button.btn-outline {
+    cursor: pointer;
+    font-family: inherit;
+}
+
+.btn-small {
+    padding: 4px 10px;
+    font-size: 12px;
+}
+
+.btn-danger { color: var(--over); border-color: var(--over); }
+.btn-danger:hover { background: var(--over); color: var(--white); }
+
+.btn-success { color: var(--under); border-color: var(--under); }
+.btn-success:hover { background: var(--under); color: var(--white); }
+
+/* ---------- Pop-up form (dialog) ---------- */
+.modal {
+    margin: auto;   /* the "* { margin: 0 }" reset would otherwise push the dialog to the corner */
+    width: min(640px, calc(100% - 32px));
+    max-height: calc(100vh - 32px);
+    padding: 24px;
+    border: none;
+    border-top: 4px solid var(--copper);
+    border-radius: 6px;
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
+    color: var(--text);
+}
+
+.modal::backdrop { background: rgba(4, 7, 26, 0.6); }
+
+.modal h2 {
+    font-size: 20px;
+    margin-bottom: 12px;
+}
+
+.modal .help-text { margin: 0 0 16px; }
+
+.modal-actions { margin-top: 20px; }
+
+.form-field input[aria-invalid="true"],
+.form-field select[aria-invalid="true"] {
+    border: 2px solid var(--over);
+}
+
+.form-errors {
+    background: var(--over-bg);
+    border: 1px solid #e3b3b3;
+    color: var(--over);
+    padding: 10px 14px;
+    border-radius: 4px;
+    font-size: 14px;
+    margin-bottom: 16px;
+}
+.form-errors:empty { display: none; }
+
+.form-errors-title { font-weight: bold; }
+
+.form-errors ul {
+    list-style: disc;
+    padding-left: 20px;
+    margin-top: 4px;
+}
+
+/* ---------- Schedule page ---------- */
+.sch-task-table td:first-child { min-width: 200px; }
+
+/* Let the Project and Assigned To columns wrap so the Actions column fits */
+.sch-task-table td:nth-child(2),
+.sch-task-table td:nth-child(3) {
+    white-space: normal;
+    min-width: 120px;
+}
+
+.sch-task-name { display: block; }
+
+.sch-task-desc {
+    display: block;
+    font-weight: normal;
+    font-size: 12px;
+    color: var(--muted);
+}
+
+.sch-row--done .sch-task-name {
+    text-decoration: line-through;
+    color: var(--muted);
+}
+
+.sch-overdue-tag {
+    display: table;   /* sits on its own line under the due date */
+    margin-top: 4px;
+}
+
+.sch-priority { font-weight: bold; }
+.sch-priority--high { color: var(--over); }
+.sch-priority--high::before { content: "▲ "; }
+.sch-priority--medium { color: var(--copper); }
+.sch-priority--medium::before { content: "■ "; }
+.sch-priority--low { color: var(--muted); }
+.sch-priority--low::before { content: "▼ "; }
+
+/* Upcoming deadlines: small cards in a grid */
+.sch-deadlines {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+    gap: 12px;
+}
+
+.sch-deadline {
+    display: flex;
+    gap: 12px;
+    padding: 10px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+}
+
+.sch-deadline-date {
+    flex: 0 0 52px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    background: var(--navy);
+    color: var(--white);
+    border-radius: 4px;
+    padding: 4px 0;
+}
+
+.sch-deadline-month {
+    font-size: 11px;
+    font-weight: bold;
+    text-transform: uppercase;
+    color: #c9cdd8;
+}
+
+.sch-deadline-day {
+    font-size: 20px;
+    font-weight: bold;
+}
+
+.sch-deadline-name,
+.sch-deadline-project,
+.sch-deadline-when { display: block; }
+
+.sch-deadline-name { font-weight: bold; }
+
+.sch-deadline-project,
+.sch-deadline-when {
+    font-size: 13px;
+    color: var(--muted);
+}
+
+.sch-deadline--soon .sch-deadline-date { background: var(--copper); }
+.sch-deadline--soon .sch-deadline-month { color: var(--white); }
+
+.sch-deadline--overdue { border-color: var(--over); background: var(--over-bg); }
+.sch-deadline--overdue .sch-deadline-date { background: var(--over); }
+.sch-deadline--overdue .sch-deadline-month { color: var(--white); }
+.sch-deadline--overdue .sch-deadline-when {
+    color: var(--over);
+    font-weight: bold;
+}
+
+.empty-text {
+    color: var(--muted);
+    text-align: center;
+    padding: 12px;
+}
+
+@media (max-width: 800px) {
+    .modal { padding: 18px; }
 }

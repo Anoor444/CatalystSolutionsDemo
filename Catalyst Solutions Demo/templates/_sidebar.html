@@ -12,7 +12,7 @@
     <nav class="nav">
         {% if current_role == 'client' %}
         <a href="{{ url_for('dashboard') }}" class="nav-link {% if active_page == 'dashboard' %}active{% endif %}"><span class="icon">⌂</span> Dashboard</a>
-        <a href="{{ url_for('client_my_projects') }}" class="nav-link {% if active_page == 'projects' %}active{% endif %}"><span class="icon">▣</span> My Projects</a>
+        <a href="{{ url_for('client_my_projects') }}" class="nav-link {% if active_page == 'projects' %}active{% endif %}"><span class="icon">▣</span> My Project</a>
         <a href="{{ url_for('client_estimates') }}" class="nav-link {% if active_page == 'estimates' %}active{% endif %}"><span class="icon">✎</span> Estimates</a>
         <a href="{{ url_for('client_invoices') }}" class="nav-link {% if active_page == 'invoices' %}active{% endif %}"><span class="icon">$</span> Invoices</a>
         {% else %}
@@ -21,10 +21,10 @@
         {% endif %}
         <a href="{{ url_for('projects') }}" class="nav-link {% if active_page == 'projects' %}active{% endif %}"><span class="icon">▣</span> Projects</a>
         {% if current_role == 'employee' %}
-        <a href="#" class="nav-link"><span class="icon">✎</span> Estimates</a>
-        <a href="#" class="nav-link"><span class="icon">$</span> Invoices</a>
-        <a href="#" class="nav-link"><span class="icon">▤</span> Job Costs</a>
-        <a href="#" class="nav-link"><span class="icon">▦</span> Schedule</a>
+        <a href="{{ url_for('estimates') }}" class="nav-link {% if active_page == 'estimates' %}active{% endif %}"><span class="icon">✎</span> Estimates</a>
+        <a href="{{ url_for('invoices') }}" class="nav-link {% if active_page == 'invoices' %}active{% endif %}"><span class="icon">$</span> Invoices</a>
+        <a href="{{ url_for('job_costs') }}" class="nav-link {% if active_page == 'job_costs' %}active{% endif %}"><span class="icon">▤</span> Job Costs</a>
+        <a href="{{ url_for('schedule') }}" class="nav-link {% if active_page == 'schedule' %}active{% endif %}"><span class="icon">▦</span> Schedule</a>
         <a href="{{ url_for('subcontractors') }}" class="nav-link {% if active_page == 'subcontractors' %}active{% endif %}"><span class="icon">⚒</span> Subcontractors</a>
         <a href="{{ url_for('clients') }}" class="nav-link {% if active_page == 'clients' %}active{% endif %}"><span class="icon">☺</span> Clients</a>
         {% endif %}

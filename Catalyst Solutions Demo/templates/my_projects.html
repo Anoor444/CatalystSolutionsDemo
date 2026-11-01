@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>My Projects | Buff Bison Construction</title>
+    <title>{{ 'My Project' if current_role == 'client' else 'My Projects' }} | Buff Bison Construction</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
 </head>
 <body>
@@ -14,8 +14,8 @@
     <div class="main">
         <header class="header">
             <div>
-                <h1>My Projects</h1>
-                <p class="welcome">{% if current_role == 'subcontractor' %}View the status and progress of your assigned projects.{% else %}View the status and progress of your construction projects.{% endif %}</p>
+                <h1>{{ client_project_name if current_role == 'client' else 'My Projects' }}</h1>
+                <p class="welcome">{% if current_role == 'subcontractor' %}View the status and progress of your assigned projects.{% else %}Track the status and progress of each assignment within your kitchen remodel.{% endif %}</p>
             </div>
             <div class="header-right">
                 <div class="profile">
@@ -28,13 +28,13 @@
         <main class="content">
             <section class="card">
                 <div class="table-toolbar">
-                    <h2>Your Projects</h2>
+                    <h2>{{ 'Project Assignments' if current_role == 'client' else 'Your Projects' }}</h2>
                 </div>
                 <div class="table-wrap">
                     <table>
                         <thead>
                             <tr>
-                                <th>Project</th>
+                                <th>{{ 'Assignment' if current_role == 'client' else 'Project' }}</th>
                                 <th>Status</th>
                                 <th>Progress</th>
                                 <th>Due Date</th>
@@ -54,7 +54,7 @@
                                 <td><a href="{{ url_for('project_details', project_id=loop.index) }}" class="btn-outline">View</a></td>
                             </tr>
                             {% else %}
-                            <tr><td colspan="5">No projects are available.</td></tr>
+                            <tr><td colspan="5">No {{ 'assignments' if current_role == 'client' else 'projects' }} are available.</td></tr>
                             {% endfor %}
                         </tbody>
                     </table>

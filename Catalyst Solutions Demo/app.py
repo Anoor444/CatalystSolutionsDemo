@@ -20,6 +20,8 @@ from flask import (
 from werkzeug.security import check_password_hash, generate_password_hash
 from werkzeug.utils import secure_filename
 
+from demo_data import get_job_cost_data, get_schedule_data
+
 app = Flask(__name__)
 app.config["MAX_CONTENT_LENGTH"] = 16 * 1024 * 1024
 app.config["SESSION_COOKIE_HTTPONLY"] = True
@@ -69,6 +71,54 @@ SAMPLE_DOCUMENTS = (
         "project_name": "Memorial Bathroom Renovation",
         "date_added": "October 17, 2026",
     },
+    {
+        "filename": "HVAC Installation Estimate.pdf",
+        "document_type": "Estimate",
+        "project_name": "Katy Home Addition",
+        "date_added": "October 19, 2026",
+    },
+    {
+        "filename": "Cabinet Deposit Invoice.pdf",
+        "document_type": "Invoice",
+        "project_name": "Riverstone Kitchen Remodel",
+        "date_added": "October 20, 2026",
+    },
+    {
+        "filename": "Tile Purchase Receipt.pdf",
+        "document_type": "Receipt",
+        "project_name": "Memorial Bathroom Renovation",
+        "date_added": "October 21, 2026",
+    },
+    {
+        "filename": "Roofing Subcontract Agreement.pdf",
+        "document_type": "Contract",
+        "project_name": "Sugar Land Roof Replacement",
+        "date_added": "October 22, 2026",
+    },
+    {
+        "filename": "Foundation Inspection Report.pdf",
+        "document_type": "Other",
+        "project_name": "Katy Home Addition",
+        "date_added": "October 23, 2026",
+    },
+    {
+        "filename": "Electrical Materials Receipt.pdf",
+        "document_type": "Receipt",
+        "project_name": "Riverstone Kitchen Remodel",
+        "date_added": "October 25, 2026",
+    },
+    {
+        "filename": "Bathroom Change Order.docx",
+        "document_type": "Contract",
+        "project_name": "Memorial Bathroom Renovation",
+        "date_added": "October 27, 2026",
+    },
+    {
+        "filename": "Project Budget Summary.xlsx",
+        "document_type": "Other",
+        "project_name": "Katy Home Addition",
+        "date_added": "October 30, 2026",
+    },
 )
 SAMPLE_PHOTOS = (
     {
@@ -96,30 +146,31 @@ SAMPLE_PHOTOS = (
         "uploaded_by": "Subcontractor",
     },
 )
+CLIENT_PROJECT_NAME = "Riverstone Kitchen Remodel"
 SAMPLE_CLIENT_PROJECTS = (
     {
-        "project": "Riverstone Kitchen Remodel",
+        "project": "Cabinet Installation",
         "status": "In Progress",
         "progress": 65,
         "due_date": "November 15, 2026",
     },
     {
-        "project": "Sugar Land Roof Replacement",
+        "project": "Countertop Installation",
         "status": "In Progress",
         "progress": 55,
-        "due_date": "October 28, 2026",
+        "due_date": "November 10, 2026",
     },
     {
-        "project": "Memorial Bathroom Renovation",
+        "project": "Flooring Installation",
         "status": "Planning",
         "progress": 10,
-        "due_date": "December 12, 2026",
+        "due_date": "November 12, 2026",
     },
     {
-        "project": "Katy Home Addition",
+        "project": "Electrical and Lighting",
         "status": "In Progress",
         "progress": 48,
-        "due_date": "January 20, 2027",
+        "due_date": "November 15, 2026",
     },
 )
 SAMPLE_CLIENT_ESTIMATES = (
@@ -131,10 +182,10 @@ SAMPLE_CLIENT_ESTIMATES = (
         "status": "Pending Review",
     },
     {
-        "estimate": "Roof Replacement Estimate",
-        "project": "Sugar Land Roof Replacement",
+        "estimate": "Countertop Installation Estimate",
+        "project": CLIENT_PROJECT_NAME,
         "date": "October 14, 2026",
-        "amount": "$22,000",
+        "amount": "$7,500",
         "status": "Approved",
     },
 )
@@ -148,9 +199,53 @@ SAMPLE_CLIENT_INVOICES = (
     },
     {
         "invoice": "Invoice #1038",
-        "project": "Sugar Land Roof Replacement",
+        "project": CLIENT_PROJECT_NAME,
         "date": "October 10, 2026",
         "amount": "$4,100",
+        "status": "Paid",
+    },
+)
+
+SAMPLE_SUBCONTRACTOR_PROJECTS = (
+    {
+        "project": "Riverstone Kitchen Remodel",
+        "status": "In Progress",
+        "progress": 65,
+        "due_date": "November 15, 2026",
+    },
+    {
+        "project": "Sugar Land Roof Replacement",
+        "status": "In Progress",
+        "progress": 80,
+        "due_date": "November 6, 2026",
+    },
+    {
+        "project": "Memorial Bathroom Renovation",
+        "status": "Planning",
+        "progress": 10,
+        "due_date": "November 24, 2026",
+    },
+)
+SAMPLE_SUBCONTRACTOR_INVOICES = (
+    {
+        "invoice": "Invoice #SC-2026-101",
+        "project": "Riverstone Kitchen Remodel",
+        "date": "October 28, 2026",
+        "amount": "$4,800",
+        "status": "Pending Approval",
+    },
+    {
+        "invoice": "Invoice #SC-2026-102",
+        "project": "Sugar Land Roof Replacement",
+        "date": "October 30, 2026",
+        "amount": "$6,250",
+        "status": "Approved - Payment Pending",
+    },
+    {
+        "invoice": "Invoice #SC-2026-098",
+        "project": "Riverstone Kitchen Remodel",
+        "date": "October 16, 2026",
+        "amount": "$2,400",
         "status": "Paid",
     },
 )
@@ -248,7 +343,7 @@ def provide_template_security_helpers():
             session["csrf_token"] = secrets.token_urlsafe(32)
         return session["csrf_token"]
 
-    return {"csrf_token": csrf_token, "current_role": session.get("role")}
+    return {"csrf_token": csrf_token, "current_role": session.get("role"), "client_project_name": CLIENT_PROJECT_NAME}
 
 
 @app.cli.command("create-user")
@@ -336,8 +431,11 @@ def dashboard():
         return render_template(
             "subcontractor.dashboard.html",
             user_name=session["user"],
-            projects=(),
-            open_invoices=(),
+            projects=SAMPLE_SUBCONTRACTOR_PROJECTS,
+            open_invoices=tuple(
+                invoice for invoice in SAMPLE_SUBCONTRACTOR_INVOICES
+                if invoice["status"] != "Paid"
+            ),
         )
     if session["role"] == "client":
         pending_estimates = tuple(
@@ -369,7 +467,7 @@ def projects():
         return render_template(
             "my_projects.html",
             user_name=session["user"],
-            projects=(),
+            projects=SAMPLE_SUBCONTRACTOR_PROJECTS,
         )
     if session["role"] == "client":
         return render_template(
@@ -380,11 +478,45 @@ def projects():
     return render_template("projects.html", user_name=session["user"])
 
 @app.route("/estimates")
+@role_required("employee")
 def estimates():
-    if "user" not in session:
-        return redirect(url_for("login"))
-
     return render_template("estimates.html", user_name=session["user"])
+
+
+@app.route("/invoices")
+@role_required("employee")
+def invoices():
+    return render_template(
+        "client_records.html",
+        user_name=session["user"],
+        active_page="invoices",
+        page_title="Invoices",
+        page_description="Review sample project invoices.",
+        records=SAMPLE_CLIENT_INVOICES,
+        first_column="Invoice",
+        first_value="invoice",
+        records_label="Project Invoices",
+    )
+
+
+@app.route("/job-costs")
+@role_required("employee")
+def job_costs():
+    return render_template(
+        "job_costs.html",
+        user_name=session["user"],
+        job_cost_data=get_job_cost_data(),
+    )
+
+
+@app.route("/schedule")
+@role_required("employee")
+def schedule():
+    return render_template(
+        "schedule.html",
+        user_name=session["user"],
+        schedule_data=get_schedule_data(),
+    )
 
 
 @app.route("/client/my-projects")
@@ -405,7 +537,7 @@ def client_estimates():
         user_name=session["user"],
         active_page="estimates",
         page_title="Estimates",
-        page_description="Review estimates for your projects.",
+        page_description="Review estimates for your Riverstone Kitchen Remodel assignments.",
         records=SAMPLE_CLIENT_ESTIMATES,
         first_column="Estimate",
         first_value="estimate",
@@ -421,7 +553,7 @@ def client_invoices():
         user_name=session["user"],
         active_page="invoices",
         page_title="Invoices",
-        page_description="Review invoices for your projects.",
+        page_description="Review invoices for your Riverstone Kitchen Remodel assignments.",
         records=SAMPLE_CLIENT_INVOICES,
         first_column="Invoice",
         first_value="invoice",
@@ -438,7 +570,7 @@ def subcontractor_invoices():
         active_page="invoices",
         page_title="My Invoices",
         page_description="Review invoices for your assigned projects.",
-        records=(),
+        records=SAMPLE_SUBCONTRACTOR_INVOICES,
         first_column="Invoice",
         first_value="invoice",
         records_label="Your Invoices",
@@ -458,6 +590,22 @@ def new_project():
 @app.route("/project/<int:project_id>")
 @role_required(*ROLES)
 def project_details(project_id):
+    if session["role"] == "subcontractor":
+        if not 1 <= project_id <= len(SAMPLE_SUBCONTRACTOR_PROJECTS):
+            abort(404)
+        return render_template(
+            "client_assignment.html",
+            user_name=session["user"],
+            assignment=SAMPLE_SUBCONTRACTOR_PROJECTS[project_id - 1],
+        )
+    if session["role"] == "client":
+        if not 1 <= project_id <= len(SAMPLE_CLIENT_PROJECTS):
+            abort(404)
+        return render_template(
+            "client_assignment.html",
+            user_name=session["user"],
+            assignment=SAMPLE_CLIENT_PROJECTS[project_id - 1],
+        )
     # For now every ID shows the same sample project.
     # Later: look up project_id in MySQL.
     return render_template("project_details.html", user_name=session["user"])

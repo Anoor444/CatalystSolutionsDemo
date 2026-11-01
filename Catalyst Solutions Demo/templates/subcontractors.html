@@ -22,7 +22,6 @@
                 <p class="welcome">Manage subcontractors and project assignments.</p>
             </div>
             <div class="header-right">
-                <!-- PLACEHOLDER: the Add Subcontractor form is not built yet -->
                 <a href="{{ url_for('new_subcontractor') }}" class="btn">+ Add Subcontractor</a>
                 <div class="profile">
                     <span class="avatar">{{ user_name[0] }}</span>
@@ -31,17 +30,26 @@
             </div>
         </header>
 
-        <main class="content">
+        <main class="content" data-directory="subcontractors">
+            <p class="demo-notice">These fictional subcontractors are for demonstration. New subcontractor records are not saved yet.</p>
+            <div class="directory-summary" data-directory-summary></div>
 
             <section class="card">
 
                 <div class="table-toolbar">
                     <h2>All Subcontractors</h2>
-                    <div class="filters">
-                        <input type="search" id="sub-search" class="search"
-                               placeholder="Search subcontractors...">
-                    </div>
                 </div>
+                <div class="filters directory-filters">
+                    <label>Search subcontractors<input type="search" class="search" data-directory-search placeholder="Search subcontractors..."></label>
+                    <label>Trade<select class="filter-select" data-filter-column="2"><option value="">All trades</option></select></label>
+                    <label>Status<select class="filter-select" data-filter-column="4"><option value="">All</option></select></label>
+                    <label>Sort by<select class="filter-select" data-directory-sort>
+                        <option value="name-asc">Name (A?Z)</option>
+                        <option value="name-desc">Name (Z?A)</option>
+                    </select></label>
+                    <button type="button" class="btn-outline" data-directory-clear>Clear filters</button>
+                </div>
+                <p class="directory-count" data-directory-count role="status" aria-live="polite"></p>
 
                 <div class="table-wrap">
                     <table id="subs-table">
@@ -78,9 +86,57 @@
                                 <td><span class="status planning">Inactive</span></td>
                             </tr>
 
-                            <!-- Shown by the script below when nothing matches the search -->
-                            <tr id="no-results" class="empty-row" style="display: none;">
-                                <td colspan="5">No subcontractors match your search.</td>
+                            <tr class="sub-row">
+                                <td>Priya Patel</td>
+                                <td>Patel HVAC Services</td>
+                                <td>Heating &amp; Cooling</td>
+                                <td>3</td>
+                                <td><span class="status completed">Active</span></td>
+                            </tr>
+                            <tr class="sub-row">
+                                <td>Marcus Reed</td>
+                                <td>Reed Concrete Works</td>
+                                <td>Concrete &amp; Foundations</td>
+                                <td>2</td>
+                                <td><span class="status completed">Active</span></td>
+                            </tr>
+                            <tr class="sub-row">
+                                <td>Ashley Nguyen</td>
+                                <td>Nguyen Custom Cabinets</td>
+                                <td>Cabinetry &amp; Millwork</td>
+                                <td>1</td>
+                                <td><span class="status completed">Active</span></td>
+                            </tr>
+                            <tr class="sub-row">
+                                <td>Luis Martinez</td>
+                                <td>Martinez Flooring Co.</td>
+                                <td>Flooring &amp; Tile</td>
+                                <td>2</td>
+                                <td><span class="status completed">Active</span></td>
+                            </tr>
+                            <tr class="sub-row">
+                                <td>Nicole Brooks</td>
+                                <td>Brooks Painting Studio</td>
+                                <td>Interior &amp; Exterior Painting</td>
+                                <td>1</td>
+                                <td><span class="status completed">Active</span></td>
+                            </tr>
+                            <tr class="sub-row">
+                                <td>Kevin Wilson</td>
+                                <td>Wilson Framing Crew</td>
+                                <td>Framing &amp; Carpentry</td>
+                                <td>0</td>
+                                <td><span class="status planning">Inactive</span></td>
+                            </tr>
+                            <tr class="sub-row">
+                                <td>Tanya Robinson</td>
+                                <td>Robinson Landscape Design</td>
+                                <td>Landscaping</td>
+                                <td>1</td>
+                                <td><span class="status completed">Active</span></td>
+                            </tr>
+                            <tr data-directory-empty hidden>
+                                <td colspan="5">No subcontractors match your search or filters. Try a different search or clear the filters.</td>
                             </tr>
                         </tbody>
                     </table>
@@ -91,24 +147,6 @@
     </div>
 </div>
 
-<!-- Simple search filter: hides rows that do not contain the typed text -->
-<script>
-    const searchBox = document.getElementById("sub-search");
-    const rows = document.querySelectorAll("#subs-table tr.sub-row");
-    const noResults = document.getElementById("no-results");
-
-    searchBox.addEventListener("input", function () {
-        const text = searchBox.value.toLowerCase();
-        let visible = 0;
-
-        rows.forEach(function (row) {
-            const matches = row.textContent.toLowerCase().includes(text);
-            row.style.display = matches ? "" : "none";
-            if (matches) visible++;
-        });
-
-        noResults.style.display = visible === 0 ? "" : "none";
-    });
-</script>
+<script src="{{ url_for('static', filename='js/directory.js') }}" defer></script>
 </body>
 </html>

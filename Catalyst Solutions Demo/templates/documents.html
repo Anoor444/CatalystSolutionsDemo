@@ -32,13 +32,29 @@
             </div>
         </header>
 
-        <main class="content">
+        <main class="content" data-directory="documents">
+            <p class="demo-notice">Sample documents are fictional previews without downloadable files. Uploaded documents can be downloaded using their names.</p>
+            <div class="directory-summary" data-directory-summary></div>
 
             <section class="card">
 
                 <div class="table-toolbar">
                     <h2>All Documents</h2>
                 </div>
+                <div class="filters directory-filters">
+                    <label>Search documents<input type="search" class="search" data-directory-search placeholder="Search documents..."></label>
+                    <label>Document type<select class="filter-select" data-filter-column="1"><option value="">All document types</option></select></label>
+                    <label>Project<select class="filter-select" data-filter-column="2"><option value="">All projects</option></select></label>
+                    <label>Status<select class="filter-select" data-filter-column="4"><option value="">All</option></select></label>
+                    <label>Sort by<select class="filter-select" data-directory-sort>
+                        <option value="name-asc">Name (A?Z)</option>
+                        <option value="name-desc">Name (Z?A)</option>
+                        <option value="date-desc">Newest first</option>
+                        <option value="date-asc">Oldest first</option>
+                    </select></label>
+                    <button type="button" class="btn-outline" data-directory-clear>Clear filters</button>
+                </div>
+                <p class="directory-count" data-directory-count role="status" aria-live="polite"></p>
 
                 <div class="table-wrap">
                     <table>
@@ -64,7 +80,7 @@
                                     <td>{{ document.date_added }}</td>
                                     <td><span class="status progress">Uploaded</span></td>
                                 </tr>
-                            {% else %}
+                            {% endfor %}
                                 {% for document in sample_documents %}
                                     <tr>
                                         <td>{{ document.filename }}</td>
@@ -74,7 +90,9 @@
                                         <td><span class="status planning">Sample</span></td>
                                     </tr>
                                 {% endfor %}
-                            {% endfor %}
+                            <tr data-directory-empty hidden>
+                                <td colspan="5">No documents match your search or filters. Try a different search or clear the filters.</td>
+                            </tr>
                         </tbody>
                     </table>
                 </div>
@@ -83,5 +101,6 @@
         </main>
     </div>
 </div>
+<script src="{{ url_for('static', filename='js/directory.js') }}" defer></script>
 </body>
 </html>
