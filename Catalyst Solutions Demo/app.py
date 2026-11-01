@@ -51,6 +51,13 @@ def estimates():
 
     return render_template("estimates.html", user_name=session["user"])
 
+@app.route("/invoices")
+def invoices():
+    if "user" not in session:
+        return redirect(url_for("login"))
+    
+    return render_template("invoices.html", user_name=session["user"])
+
 
 @app.route("/new-project", methods=["GET", "POST"])
 def new_project():

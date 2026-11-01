@@ -1,0 +1,134 @@
+/* ==========================================================
+   INVOICES PAGE
+   Builds on style.css and estimates.css (modals, line items,
+   totals, buttons). Only invoice-specific styles live here.
+   ========================================================== */
+
+/* Small line under a summary value, e.g. "3 invoices" */
+.summary-note {
+    color: var(--muted);
+    font-size: 13px;
+    margin-top: 4px;
+}
+
+/* Overdue due dates in the table */
+.overdue-date {
+    color: #8a2b2b;
+    font-weight: bold;
+}
+
+/* ---------- Printable invoice document ---------- */
+.invoice-doc {
+    background: var(--white);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 32px 36px;
+    color: var(--text);
+}
+
+.doc-top {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 24px;
+    padding-bottom: 20px;
+    border-bottom: 3px solid var(--copper);
+    margin-bottom: 24px;
+}
+
+.doc-logo {
+    width: 120px;
+    height: auto;
+    display: block;
+}
+
+.doc-title {
+    text-align: right;
+}
+
+.doc-title h2 {
+    font-size: 28px;
+    letter-spacing: 2px;
+    color: var(--navy);
+}
+
+.doc-title p {
+    color: var(--muted);
+    margin-top: 4px;
+    font-size: 14px;
+}
+
+.doc-meta {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 16px;
+    margin-bottom: 28px;
+}
+
+.doc-meta small {
+    display: block;
+    font-size: 11px;
+    font-weight: bold;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 4px;
+}
+
+.doc-meta div { font-size: 14px; }
+
+.doc-table td:first-child {
+    font-weight: normal;
+    white-space: normal;
+}
+
+.doc-total {
+    width: 280px;
+    max-width: 100%;
+    margin: 16px 0 0 auto;
+}
+
+.doc-total .totals-row.grand { color: var(--navy); }
+
+.doc-footer {
+    margin-top: 32px;
+    padding-top: 16px;
+    border-top: 1px solid var(--border);
+    color: var(--muted);
+    font-size: 13px;
+    text-align: center;
+}
+
+.paid-stamp {
+    display: inline-block;
+    margin-top: 8px;
+    padding: 4px 12px;
+    border: 2px solid #2b6a3a;
+    color: #2b6a3a;
+    border-radius: 4px;
+    font-weight: bold;
+    letter-spacing: 2px;
+    font-size: 13px;
+}
+
+@media (max-width: 800px) {
+    .doc-meta { grid-template-columns: repeat(2, 1fr); }
+    .invoice-doc { padding: 20px; }
+}
+
+/* ---------- Print: only the invoice document ---------- */
+@media print {
+    body { background: #fff; }
+    body * { visibility: hidden; }
+    .print-area, .print-area * { visibility: visible; }
+    .print-area {
+        position: absolute;
+        left: 0;
+        top: 0;
+        width: 100%;
+        border: none;
+        padding: 0;
+    }
+    .modal-backdrop { position: static; background: none; padding: 0; }
+    .modal { box-shadow: none; border: none; }
+    @page { margin: 18mm; }
+}
