@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Invoices | Buff Bison Construction</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <!-- Shared modal, line-item and totals styles (same as the Estimates page) -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/estimates.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/invoices.css') }}">
+</head>
+<body data-logo="{{ url_for('static', filename='css/logo.png') }}">
+<div class="app">
+
+    <!-- ===== SIDEBAR ===== -->
+    {% set active_page = 'invoices' %}
+    {% include "_sidebar.html" %}
+
+    <!-- ===== MAIN CONTENT ===== -->
+    <div class="main">
+
+        <!-- Top header -->
+        <header class="header">
+            <div>
+                <h1>Invoices</h1>
+                <p class="welcome">Create, track, and export project invoices</p>
+            </div>
+            <div class="header-right">
+                <button type="button" class="btn" id="newInvoiceBtn">+ New Invoice</button>
+                <div class="profile">
+                    <span class="avatar">{{ user_name[0] }}</span>
+                    <span class="profile-name">{{ user_name }}</span>
+                </div>
+            </div>
+        </header>
+
+        <main class="content">
+
+            <!-- Summary cards -->
+            <section class="cards">
+                <div class="card summary">
+                    <p class="summary-label">Unpaid Invoices</p>
+                    <p class="summary-value" id="statUnpaid">$0</p>
+                    <p class="summary-note" id="statUnpaidCount"></p>
+                </div>
+                <div class="card summary">
+                    <p class="summary-label">Overdue</p>
+                    <p class="summary-value" id="statOverdue">$0</p>
+                    <p class="summary-note" id="statOverdueCount"></p>
+                </div>
+                <div class="card summary">
+                    <p class="summary-label">Paid</p>
+                    <p class="summary-value" id="statPaid">$0</p>
+                    <p class="summary-note" id="statPaidCount"></p>
+                </div>
+                <div class="card summary">
+                    <p class="summary-label">Total Invoices</p>
+                    <p class="summary-value" id="statTotal">0</p>
+                    <p class="summary-note" id="statDraftCount"></p>
+                </div>
+            </section>
+
+            <!-- Invoices table -->
+            <section class="card">
+                <div class="table-toolbar">
+                    <h2>All Invoices</h2>
+                    <div class="filters">
+                        <input type="text" id="searchInput" class="search" placeholder="Search invoice #, project, or client...">
+                        <label for="statusFilter" class="filter-label">Status:</label>
+                        <select id="statusFilter" class="filter-select">
+                            <option value="All">All</option>
+                            <option value="Draft">Draft</option>
+                            <option value="Unpaid">Unpaid</option>
+                            <option value="Overdue">Overdue</option>
+                            <option value="Paid">Paid</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="table-wrap">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Invoice #</th>
+                                <th>Project</th>
+                                <th>Client</th>
+                                <th>Issue Date</th>
+                                <th>Due Date</th>
+                                <th>Status</th>
+                                <th class="num">Amount</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="invoicesBody"></tbody>
+                    </table>
+                </div>
+            </section>
+
+        </main>
+    </div>
+</div>
+
+<!-- ===== INVOICE MODAL (create / edit / view) ===== -->
+<div class="modal-backdrop" id="invoiceModal" hidden>
+    <div class="modal modal-lg" role="dialog" aria-modal="true" aria-labelledby="invoiceModalTitle">
+        <div class="modal-header">
+            <div>
+                <h2 id="invoiceModalTitle">New Invoice</h2>
+                <p class="modal-sub" id="invoiceModalSub"></p>
+            </div>
+            <button type="button" class="close-btn" data-close aria-label="Close">&times;</button>
+        </div>
+
+        <form id="invoiceForm" novalidate>
+            <div class="modal-body">
+                <div class="form-grid">
+                    <div class="form-field">
+                        <label for="invProject">Project <span class="required">*</span></label>
+                        <select id="invProject" required></select>
+                    </div>
+                    <div class="form-field">
+                        <label for="invClient">Client</label>
+                        <input id="invClient" type="text" disabled placeholder="Filled in from the project">
+                    </div>
+                    <div class="form-field">
+                        <label for="invIssue">Issue Date <span class="required">*</span></label>
+                        <input id="invIssue" type="date" required>
+                    </div>
+                    <div class="form-field">
+                        <label for="invDue">Due Date <span class="required">*</span></label>
+                        <input id="invDue" type="date" required>
+                    </div>
+                </div>
+
+                <div class="line-items-header">
+                    <h3>Line Items</h3>
+                    <button type="button" class="btn-outline" id="addLineBtn">+ Add Line Item</button>
+                </div>
+
+                <div class="table-wrap">
+                    <table class="line-table">
+                        <thead>
+                            <tr>
+                                <th>Description</th>
+                                <th style="width:12%" class="num">Qty</th>
+                                <th style="width:16%" class="num">Unit Price</th>
+                                <th style="width:16%" class="num">Line Total</th>
+                                <th style="width:40px"></th>
+                            </tr>
+                        </thead>
+                        <tbody id="lineItemsBody"></tbody>
+                    </table>
+                </div>
+
+                <div class="form-error" id="formError" hidden></div>
+
+                <div class="totals">
+                    <div class="totals-row"><span>Line items</span><span id="lineCount">0</span></div>
+                    <div class="totals-row grand"><span>Invoice Total</span><span id="invoiceTotal">$0.00</span></div>
+                </div>
+            </div>
+
+            <div class="modal-footer form-actions" id="invoiceFooter"></div>
+        </form>
+    </div>
+</div>
+
+<!-- ===== PDF / PRINT PREVIEW ===== -->
+<div class="modal-backdrop" id="pdfModal" hidden>
+    <div class="modal modal-lg" role="dialog" aria-modal="true" aria-label="Invoice preview">
+        <div class="modal-header no-print">
+            <div>
+                <h2>Invoice Preview</h2>
+                <p class="modal-sub">Use "Download PDF", then choose "Save as PDF" as the printer.</p>
+            </div>
+            <button type="button" class="close-btn" data-close aria-label="Close">&times;</button>
+        </div>
+        <div class="modal-body">
+            <div class="invoice-doc print-area" id="invoiceDoc"></div>
+        </div>
+        <div class="modal-footer form-actions no-print">
+            <button type="button" class="btn-outline" data-close>Close</button>
+            <button type="button" class="btn" id="printBtn">Download PDF</button>
+        </div>
+    </div>
+</div>
+
+<div class="toast" id="toast" hidden></div>
+
+<script src="{{ url_for('static', filename='js/invoices.js') }}"></script>
+</body>
+</html>

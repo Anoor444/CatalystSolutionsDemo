@@ -482,21 +482,10 @@ def projects():
 def estimates():
     return render_template("estimates.html", user_name=session["user"])
 
-
 @app.route("/invoices")
 @role_required("employee")
 def invoices():
-    return render_template(
-        "client_records.html",
-        user_name=session["user"],
-        active_page="invoices",
-        page_title="Invoices",
-        page_description="Review sample project invoices.",
-        records=SAMPLE_CLIENT_INVOICES,
-        first_column="Invoice",
-        first_value="invoice",
-        records_label="Project Invoices",
-    )
+    return render_template("invoices.html", user_name=session["user"])
 
 
 @app.route("/job-costs")
