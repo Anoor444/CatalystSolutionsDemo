@@ -9,32 +9,8 @@
 <body>
 <div class="app">
 
-    <!-- ===== SIDEBAR ===== -->
-    <aside class="sidebar">
-        <div class="brand">
-            <img src="{{ url_for('static', filename='css/logo.png') }}" alt="Buff Bison Logo" class="logo-img">
-            <span class="brand-name">BUFF BISON</span>
-            <span class="brand-sub">CONSTRUCTION</span>
-        </div>
-
-        <nav class="nav">
-            <a href="/" class="nav-link active"><span class="icon">⌂</span> Dashboard</a>
-            <a href="{{ url_for('projects') }}" class="nav-link"><span class="icon">▣</span> Projects</a>
-            <a href="#" class="nav-link"><span class="icon">✎</span> Estimates</a>
-            <a href="#" class="nav-link"><span class="icon">$</span> Invoices</a>
-            <a href="#" class="nav-link"><span class="icon">▤</span> Job Costs</a>
-            <a href="#" class="nav-link"><span class="icon">▦</span> Schedule</a>
-            <a href="{{ url_for('subcontractors') }}" class="nav-link"><span class="icon">⚒</span> Subcontractors</a>
-            <a href="#" class="nav-link"><span class="icon">☺</span> Clients</a>
-            <a href="#" class="nav-link"><span class="icon">▭</span> Documents</a>
-            <a href="#" class="nav-link"><span class="icon">◙</span> Photos</a>
-        </nav>
-
-        <nav class="nav nav-bottom">
-            <a href="#" class="nav-link"><span class="icon">⚙</span> Settings</a>
-            <a href="{{ url_for('logout') }}" class="nav-link"><span class="icon">➜</span> Logout</a>
-        </nav>
-    </aside>
+    {% set active_page = 'dashboard' %}
+    {% include '_sidebar.html' %}
 
     <!-- ===== MAIN CONTENT ===== -->
     <div class="main">
@@ -43,14 +19,14 @@
         <header class="header">
             <div>
                 <h1>Dashboard</h1>
-                <p class="welcome">Welcome back, Daniel Carter</p>
+                <p class="welcome">Welcome back, {{ user_name }}</p>
             </div>
             <div class="header-right">
                 <input type="search" class="search" placeholder="Search projects, clients, invoices...">
-                <a href="#" class="btn">+ New Project</a>
+                {% if current_role == 'employee' %}<a href="{{ url_for('new_project') }}" class="btn">+ New Project</a>{% endif %}
                 <div class="profile">
-                    <span class="avatar">D</span>
-                    <span class="profile-name">Daniel Carter</span>
+                    <span class="avatar">{{ user_name[0] }}</span>
+                    <span class="profile-name">{{ user_name }}</span>
                 </div>
             </div>
         </header>

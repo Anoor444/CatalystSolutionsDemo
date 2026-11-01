@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Clients | Buff Bison Construction</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+<div class="app">
+
+    <!-- ===== SIDEBAR (shared file) ===== -->
+    {% set active_page = 'clients' %}
+    {% include '_sidebar.html' %}
+
+    <!-- ===== MAIN CONTENT ===== -->
+    <div class="main">
+
+        <header class="header">
+            <div>
+                <h1>Clients</h1>
+                <p class="welcome">Manage client information and associated projects.</p>
+            </div>
+            <div class="header-right">
+                <a href="{{ url_for('new_client') }}" class="btn">+ Add Client</a>
+                <div class="profile">
+                    <span class="avatar">{{ user_name[0] }}</span>
+                    <span class="profile-name">{{ user_name }}</span>
+                </div>
+            </div>
+        </header>
+
+        <main class="content">
+
+            <section class="card">
+
+                <div class="table-toolbar">
+                    <h2>All Clients</h2>
+                    <div class="filters">
+                        <!-- PLACEHOLDER: visual only, search is not built yet -->
+                        <input type="search" class="search" placeholder="Search clients...">
+                    </div>
+                </div>
+
+                <div class="table-wrap">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Client Name</th>
+                                <th>Email</th>
+                                <th>Phone Number</th>
+                                <th>Associated Projects</th>
+                                <th>Status</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <!-- Static sample data (fictional), same clients as the Projects page -->
+                            <tr>
+                                <td>Sarah Johnson</td>
+                                <td>sarah.johnson@example.com</td>
+                                <td>(555) 010-1001</td>
+                                <td>1</td>
+                                <td><span class="status completed">Active</span></td>
+                            </tr>
+                            <tr>
+                                <td>Michael Thompson</td>
+                                <td>michael.thompson@example.com</td>
+                                <td>(555) 010-1002</td>
+                                <td>1</td>
+                                <td><span class="status completed">Active</span></td>
+                            </tr>
+                            <tr>
+                                <td>Emily Davis</td>
+                                <td>emily.davis@example.com</td>
+                                <td>(555) 010-1003</td>
+                                <td>1</td>
+                                <td><span class="status completed">Active</span></td>
+                            </tr>
+                            <tr>
+                                <td>Robert Garcia</td>
+                                <td>robert.garcia@example.com</td>
+                                <td>(555) 010-1004</td>
+                                <td>1</td>
+                                <td><span class="status completed">Active</span></td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+
+        </main>
+    </div>
+</div>
+</body>
+</html>

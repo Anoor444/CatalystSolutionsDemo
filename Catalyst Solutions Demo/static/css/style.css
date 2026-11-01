@@ -73,12 +73,17 @@ ul { list-style: none; }
    ========================================================== */
 .sidebar {
     width: 240px;
+    height: 100vh;
     background: var(--navy);
     color: var(--white);
     display: flex;
     flex-direction: column;
-    padding: 24px 0;
+    padding: 24px 0 16px;
     flex-shrink: 0;
+    align-self: flex-start;
+    position: sticky;
+    top: 0;
+    overflow-y: auto;
 }
 
 .brand {
@@ -122,6 +127,15 @@ ul { list-style: none; }
 .nav-link.active {
     background: var(--copper);
     color: var(--white);
+}
+
+.logout-button {
+    width: 100%;
+    border: 0;
+    background: transparent;
+    cursor: pointer;
+    font-family: inherit;
+    text-align: left;
 }
 
 .icon {
@@ -220,6 +234,20 @@ ul { list-style: none; }
 }
 
 .summary { border-top: 3px solid var(--copper); }
+
+.cards a.card {
+    display: block;
+    color: inherit;
+}
+
+.cards a.card:hover { border-color: var(--copper); }
+
+.client-dashboard-intro { margin-bottom: 24px; }
+
+.client-dashboard-intro p {
+    color: var(--muted);
+    margin-bottom: 16px;
+}
 
 .summary-label {
     color: var(--muted);
@@ -364,7 +392,14 @@ td:first-child {
 
 @media (max-width: 800px) {
     .app { flex-direction: column; }
-    .sidebar { width: 100%; padding: 16px 0; }
+    .sidebar {
+        width: 100%;
+        height: auto;
+        padding: 16px 0;
+        align-self: auto;
+        position: static;
+        overflow-y: visible;
+    }
     .nav { display: flex; flex-wrap: wrap; }
     .nav-bottom { margin-top: 8px; }
     .header, .content { padding-left: 16px; padding-right: 16px; }
@@ -436,6 +471,52 @@ td:first-child {
     border-color: var(--copper);
 }
 
+.password-input-wrap {
+    position: relative;
+    margin-bottom: 16px;
+}
+
+.login-box .password-input-wrap input {
+    padding-right: 44px;
+    margin-bottom: 0;
+}
+
+.password-toggle {
+    position: absolute;
+    top: 50%;
+    right: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    padding: 4px;
+    border: 0;
+    background: transparent;
+    color: var(--muted);
+    cursor: pointer;
+    transform: translateY(-50%);
+}
+
+.password-toggle:hover {
+    color: var(--navy);
+}
+
+.password-toggle:focus-visible {
+    outline: 2px solid var(--copper);
+    border-radius: 4px;
+}
+
+.password-toggle svg {
+    width: 20px;
+    height: 20px;
+    fill: none;
+    stroke: currentColor;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    stroke-width: 1.8;
+}
+
 .login-btn {
     display: block;
     width: 100%;
@@ -468,6 +549,17 @@ td:first-child {
     font-size: 14px;
     margin-bottom: 16px;
 }
+
+.login-notice {
+    background: #f4f5f7;
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 10px 12px;
+    border-radius: 4px;
+    font-size: 14px;
+    margin-bottom: 16px;
+}
+
 .login-logo {
     display: block;
     width: 120px;
@@ -756,4 +848,120 @@ button.btn {
     font-weight: bold;
     padding: 3px 6px;
     border-radius: 3px;
+}
+
+/* ========================================
+   SETTINGS PAGE
+   ======================================== */
+
+/* Disabled placeholder button (looks faded and does not react to hover) */
+button.btn:disabled,
+button.btn:disabled:hover {
+    background: var(--copper);
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.form-error {
+    margin-bottom: 16px;
+    color: #8a2b2b;
+    font-weight: bold;
+}
+
+.form-help {
+    display: block;
+    margin-top: 6px;
+    color: var(--muted);
+    font-size: 12px;
+}
+
+/* Space between the details and the button */
+.form-section .info-list + .btn { margin-top: 20px; }
+
+/* ========================================
+   DISABLED PLACEHOLDER BUTTON
+   ======================================== */
+button.btn:disabled,
+button.btn:disabled:hover {
+    background: var(--copper);
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+/* ========================================
+   PHOTOS PAGE
+   ======================================== */
+
+/* Responsive grid: as many 220px+ cards as fit in a row */
+.photo-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    gap: 20px;
+}
+
+.photo-box {
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    overflow: hidden;
+    background: var(--white);
+}
+
+/* Gray placeholder where the real photo will go later */
+.photo-preview {
+    height: 150px;
+    background: #e9e5de;
+    color: var(--muted);
+    font-size: 13px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+}
+
+.photo-image {
+    display: block;
+    width: 100%;
+    object-fit: cover;
+}
+
+.photo-icon { font-size: 32px; }
+
+.photo-info { padding: 14px; }
+
+.photo-info h3 {
+    font-size: 15px;
+    margin-bottom: 8px;
+}
+
+.photo-info p {
+    font-size: 13px;
+    color: var(--muted);
+    margin-bottom: 4px;
+}
+
+.photo-info strong { color: var(--text); }
+
+/* Disabled placeholder button (faded, no hover effect).
+   Skip this block if you already added it for Settings or Documents. */
+button.btn:disabled,
+button.btn:disabled:hover {
+    background: var(--copper);
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+/* ========================================
+   SIDEBAR GAP (between main links and Settings/Logout)
+   ======================================== */
+
+/* Fixed gap that stays even when the window is short.
+   16px + the 1px divider line + 12px existing padding = about 29px above Settings. */
+.sidebar > .nav:not(.nav-bottom) {
+    margin-bottom: 64px;
+}
+
+/* On small screens the sidebar becomes a top bar, so no extra gap is needed */
+@media (max-width: 800px) {
+    .sidebar > .nav:not(.nav-bottom) {
+        margin-bottom: 0;
+    }
 }
