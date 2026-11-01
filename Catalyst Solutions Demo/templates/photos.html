@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Photos | Buff Bison Construction</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+<div class="app">
+
+    <!-- ===== SIDEBAR (shared file) ===== -->
+    {% set active_page = 'photos' %}
+    {% include '_sidebar.html' %}
+
+    <!-- ===== MAIN CONTENT ===== -->
+    <div class="main">
+
+        <header class="header">
+            <div>
+                <h1>Project Photos</h1>
+                <p class="welcome">View and manage photos associated with construction projects.</p>
+            </div>
+            <div class="header-right">
+                {% if current_role in ('employee', 'subcontractor') %}
+                <a href="{{ url_for('upload_photo') }}" class="btn">+ Upload Photo</a>
+                {% endif %}
+                <div class="profile">
+                    <span class="avatar">{{ user_name[0] }}</span>
+                    <span class="profile-name">{{ user_name }}</span>
+                </div>
+            </div>
+        </header>
+
+        <main class="content">
+
+            <section class="card">
+
+                <div class="table-toolbar">
+                    <h2>All Project Photos</h2>
+                    <div class="filters">
+                        <!-- PLACEHOLDER: visual only, filtering is not built yet -->
+                        <label for="project-filter" class="filter-label">Filter by Project:</label>
+                        <select id="project-filter" class="filter-select">
+                            <option>All Projects</option>
+                            <option>Riverstone Kitchen Remodel</option>
+                            <option>Sugar Land Roof Replacement</option>
+                            <option>Memorial Bathroom Renovation</option>
+                            <option>Katy Home Addition</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="photo-grid">
+                    {% for photo in photos %}
+                        <article class="photo-box">
+                            <img class="photo-preview photo-image"
+                                 src="{{ url_for('photo_image', photo_id=photo.id) }}"
+                                 alt="{{ photo.title }}">
+                            <div class="photo-info">
+                                <h3>{{ photo.title }}</h3>
+                                <p><strong>Project:</strong> {{ photo.project_name }}</p>
+                                <p><strong>Date Added:</strong> {{ photo.date_added }}</p>
+                                <p><strong>Uploaded By:</strong> {{ photo.uploaded_by }}</p>
+                            </div>
+                        </article>
+                    {% else %}
+                        {% for photo in sample_photos %}
+                            <article class="photo-box">
+                                <div class="photo-preview">
+                                    <span class="photo-icon">🖼</span>
+                                    Sample Photo
+                                </div>
+                                <div class="photo-info">
+                                    <h3>{{ photo.title }}</h3>
+                                    <p><strong>Project:</strong> {{ photo.project_name }}</p>
+                                    <p><strong>Date Added:</strong> {{ photo.date_added }}</p>
+                                    <p><strong>Uploaded By:</strong> {{ photo.uploaded_by }}</p>
+                                </div>
+                            </article>
+                        {% endfor %}
+                    {% endfor %}
+                </div>
+            </section>
+
+        </main>
+    </div>
+</div>
+</body>
+</html>

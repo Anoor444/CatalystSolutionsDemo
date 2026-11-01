@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Upload Document | Buff Bison Construction</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+<div class="app">
+    {% set active_page = 'documents' %}
+    {% include '_sidebar.html' %}
+
+    <div class="main">
+        <header class="header">
+            <div>
+                <h1>Upload Document</h1>
+                <p class="welcome">Add a document to your project records.</p>
+            </div>
+            <div class="header-right">
+                <div class="profile">
+                    <span class="avatar">{{ user_name[0] }}</span>
+                    <span class="profile-name">{{ user_name }}</span>
+                </div>
+            </div>
+        </header>
+
+        <main class="content">
+            <form method="POST" action="{{ url_for('upload_document') }}"
+                  enctype="multipart/form-data" class="form-page">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <section class="card form-section">
+                    <h2>Document Information</h2>
+                    {% if error %}
+                        <p class="form-error" role="alert">{{ error }}</p>
+                    {% endif %}
+                    <div class="form-grid">
+                        <div class="form-field full">
+                            <label for="document">Document File <span class="required">*</span></label>
+                            <input type="file" id="document" name="document"
+                                   accept=".pdf,.doc,.docx,.xls,.xlsx,.csv,.txt" required>
+                            <small class="form-help">PDF, Word, Excel, CSV, or TXT; maximum file size is 16 MB.</small>
+                        </div>
+                        <div class="form-field">
+                            <label for="document_type">Document Type <span class="required">*</span></label>
+                            <select id="document_type" name="document_type" required>
+                                <option value="">Select a type</option>
+                                {% for document_type in document_types %}
+                                    <option value="{{ document_type }}"
+                                            {% if request.form.get('document_type') == document_type %}selected{% endif %}>
+                                        {{ document_type }}
+                                    </option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="form-field">
+                            <label for="project_name">Associated Project</label>
+                            <input type="text" id="project_name" name="project_name"
+                                   value="{{ request.form.get('project_name', '') }}"
+                                   maxlength="120" placeholder="Enter project name">
+                        </div>
+                    </div>
+                </section>
+
+                <div class="form-actions">
+                    <a href="{{ url_for('documents') }}" class="btn-outline">Cancel</a>
+                    <button type="submit" class="btn">Upload Document</button>
+                </div>
+            </form>
+        </main>
+    </div>
+</div>
+</body>
+</html>

@@ -22,7 +22,9 @@
                 <p class="welcome">Sarah Johnson · Houston, TX</p>
             </div>
             <div class="header-right">
+                {% if current_role == 'employee' %}
                 <a href="#" class="btn">Edit Project</a>
+                {% endif %}
                 <div class="profile">
                     <span class="avatar">{{ user_name[0] }}</span>
                     <span class="profile-name">{{ user_name }}</span>
@@ -40,10 +42,12 @@
                     <small>Status</small>
                     <span class="status progress">In Progress</span>
                 </div>
+                {% if current_role == 'employee' %}
                 <div class="meta-item">
                     <small>Project Manager</small>
                     Daniel Carter
                 </div>
+                {% endif %}
                 <div class="meta-item">
                     <small>Start Date</small>
                     Aug 20, 2026
@@ -57,6 +61,7 @@
             <!-- Project overview cards -->
             <h2 class="section-heading">Project Overview</h2>
             <section class="cards">
+                {% if current_role == 'employee' %}
                 <div class="card summary">
                     <p class="summary-label">Estimated Budget</p>
                     <p class="summary-value">$48,500</p>
@@ -69,6 +74,7 @@
                     <p class="summary-label">Remaining Budget</p>
                     <p class="summary-value">$17,300</p>
                 </div>
+                {% endif %}
                 <div class="card summary">
                     <p class="summary-label">Project Progress</p>
                     <p class="summary-value">65%</p>
@@ -77,6 +83,7 @@
             </section>
 
             <!-- Tabs (switched by project_details.js) -->
+            {% if current_role == 'employee' %}
             <div class="tabs">
                 <button type="button" class="tab active" data-tab="overview">Overview</button>
                 <button type="button" class="tab" data-tab="costs">Costs</button>
@@ -86,6 +93,7 @@
                 <button type="button" class="tab" data-tab="schedule">Schedule</button>
                 <button type="button" class="tab" data-tab="subcontractors">Subcontractors</button>
             </div>
+            {% endif %}
 
             <!-- ===== OVERVIEW TAB (real content) ===== -->
             <div id="tab-overview" class="tab-panel active">
@@ -106,6 +114,7 @@
                             </dl>
                         </section>
 
+                        {% if current_role != 'client' %}
                         <section class="card">
                             <h2>Project Documents</h2>
                             <ul class="doc-list">
@@ -115,6 +124,7 @@
                             </ul>
                             <a href="#" class="text-link">View All Documents →</a>
                         </section>
+                        {% endif %}
 
                     </div>
 
@@ -169,6 +179,7 @@
             </div>
 
             <!-- ===== PLACEHOLDER TABS (future development) ===== -->
+            {% if current_role == 'employee' %}
             <div id="tab-costs" class="tab-panel">
                 <section class="card placeholder">
                     <h2>Costs</h2>
@@ -205,6 +216,7 @@
                     <p>Coming soon: subcontractors assigned to this project.</p>
                 </section>
             </div>
+            {% endif %}
 
         </main>
     </div>

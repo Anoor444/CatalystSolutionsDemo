@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Job Costs | Buff Bison Construction</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+<div class="app">
+
+    <!-- ===== SIDEBAR ===== -->
+    {% set active_page = 'job_costs' %}
+    {% include '_sidebar.html' %}
+
+    <!-- ===== MAIN CONTENT ===== -->
+    <div class="main">
+
+        <header class="header">
+            <div>
+                <h1>Job Costs</h1>
+                <p class="welcome">Track estimated costs, actual expenses, and remaining project budgets.</p>
+            </div>
+            <div class="header-right">
+                <label for="jc-project-select" class="filter-label">Project:</label>
+                <select id="jc-project-select" class="filter-select"></select>
+                <div class="profile">
+                    <span class="avatar">{{ user_name[0] }}</span>
+                    <span class="profile-name">{{ user_name }}</span>
+                </div>
+            </div>
+        </header>
+
+        <main class="content jc-page">
+
+            <p class="demo-notice">
+                <strong>Demo data:</strong> These are sample records. Expenses you add, edit, or delete
+                are kept only in this browser tab and reset when the page is reloaded.
+            </p>
+
+            <!-- Summary cards (filled in by job_costs.js) -->
+            <section class="cards" aria-label="Cost summary" aria-live="polite">
+                <div class="card summary">
+                    <p class="summary-label">Estimated Budget</p>
+                    <p class="summary-value" id="jc-estimated-total">$0.00</p>
+                    <p class="summary-note">From the approved estimate</p>
+                </div>
+                <div class="card summary">
+                    <p class="summary-label">Actual Costs</p>
+                    <p class="summary-value" id="jc-actual-total">$0.00</p>
+                    <p class="summary-note" id="jc-expense-count">0 expenses recorded</p>
+                </div>
+                <div class="card summary" id="jc-remaining-card">
+                    <p class="summary-label">Remaining Budget</p>
+                    <p class="summary-value" id="jc-remaining-total">$0.00</p>
+                    <p class="summary-note" id="jc-remaining-note">Estimated − Actual</p>
+                </div>
+                <div class="card summary" id="jc-status-card">
+                    <p class="summary-label">Budget Status</p>
+                    <p class="summary-value summary-status" id="jc-status-text">—</p>
+                    <p class="summary-note" id="jc-variance-note">Variance: $0.00</p>
+                </div>
+            </section>
+
+            <!-- Cost breakdown by category -->
+            <section class="card section-gap">
+                <h2>Cost Breakdown</h2>
+                <p class="help-text">Variance = Actual − Estimated. A positive (+) variance means the category is over budget.</p>
+                <div class="table-wrap">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th scope="col">Cost Category</th>
+                                <th scope="col" class="num">Estimated Cost</th>
+                                <th scope="col" class="num">Actual Cost</th>
+                                <th scope="col" class="num">Variance</th>
+                                <th scope="col">Status</th>
+                            </tr>
+                        </thead>
+                        <tbody id="jc-breakdown-body"></tbody>
+                        <tfoot id="jc-breakdown-foot"></tfoot>
+                    </table>
+                </div>
+            </section>
+
+            <!-- Expense list -->
+            <section class="card">
+                <div class="table-toolbar">
+                    <h2>Expenses</h2>
+                    <button type="button" class="btn" id="jc-add-expense-btn">+ Add Expense</button>
+                </div>
+                <p class="status-message" id="jc-message" role="status"></p>
+                <div class="table-wrap">
+                    <table class="jc-expense-table">
+                        <thead>
+                            <tr>
+                                <th scope="col">Date</th>
+                                <th scope="col">Expense Description</th>
+                                <th scope="col">Cost Category</th>
+                                <th scope="col">Project</th>
+                                <th scope="col" class="num">Amount</th>
+                                <th scope="col">Receipt</th>
+                                <th scope="col">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="jc-expense-body"></tbody>
+                    </table>
+                </div>
+            </section>
+
+        </main>
+    </div>
+</div>
+
+<!-- ===== Add / Edit Expense form (pop-up dialog) ===== -->
+<dialog class="modal" id="jc-expense-dialog" aria-labelledby="jc-dialog-title">
+    <form id="jc-expense-form" novalidate>
+        <h2 id="jc-dialog-title">Add Expense</h2>
+        <p class="help-text">Fields marked <span class="required">*</span> are required.</p>
+
+        <div class="form-errors" id="jc-form-errors" role="alert"></div>
+
+        <div class="form-grid">
+            <div class="form-field">
+                <label for="jc-form-project">Project <span class="required">*</span></label>
+                <select id="jc-form-project" name="project_id" required></select>
+            </div>
+            <div class="form-field">
+                <label for="jc-form-date">Expense Date <span class="required">*</span></label>
+                <input type="date" id="jc-form-date" name="expense_date" required>
+            </div>
+            <div class="form-field full">
+                <label for="jc-form-description">Expense Description <span class="required">*</span></label>
+                <input type="text" id="jc-form-description" name="description" maxlength="200" required>
+            </div>
+            <div class="form-field">
+                <label for="jc-form-category">Cost Category <span class="required">*</span></label>
+                <select id="jc-form-category" name="category" required></select>
+            </div>
+            <div class="form-field">
+                <label for="jc-form-amount">Amount ($) <span class="required">*</span></label>
+                <input type="number" id="jc-form-amount" name="amount" min="0" step="0.01" inputmode="decimal" placeholder="0.00" required>
+            </div>
+            <div class="form-field full">
+                <label for="jc-form-receipt">Receipt Attachment (optional)</label>
+                <input type="file" id="jc-form-receipt" name="receipt" accept=".pdf,.jpg,.jpeg,.png" aria-describedby="jc-receipt-help">
+                <p class="help-text" id="jc-receipt-help">
+                    Demo only: the file name is recorded, but the file is <strong>not uploaded or saved</strong>.
+                    <span id="jc-current-receipt"></span>
+                </p>
+            </div>
+        </div>
+
+        <div class="form-actions modal-actions">
+            <button type="button" class="btn-outline" id="jc-cancel-btn">Cancel</button>
+            <button type="submit" class="btn">Save Expense</button>
+        </div>
+    </form>
+</dialog>
+
+<!-- Demo data from Flask (app.py -> demo_data.py). "tojson" safely converts the Python data to JSON. -->
+<script id="jc-data" type="application/json">{{ job_cost_data | tojson }}</script>
+<script src="{{ url_for('static', filename='js/job_costs.js') }}"></script>
+</body>
+</html>

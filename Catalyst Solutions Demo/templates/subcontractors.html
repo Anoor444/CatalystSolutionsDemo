@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Subcontractors | Buff Bison Construction</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+<div class="app">
+
+    <!-- ===== SIDEBAR (shared file) ===== -->
+    {% set active_page = 'subcontractors' %}
+    {% include '_sidebar.html' %}
+
+    <!-- ===== MAIN CONTENT ===== -->
+    <div class="main">
+
+        <header class="header">
+            <div>
+                <h1>Subcontractors</h1>
+                <p class="welcome">Manage subcontractors and project assignments.</p>
+            </div>
+            <div class="header-right">
+                <a href="{{ url_for('new_subcontractor') }}" class="btn">+ Add Subcontractor</a>
+                <div class="profile">
+                    <span class="avatar">{{ user_name[0] }}</span>
+                    <span class="profile-name">{{ user_name }}</span>
+                </div>
+            </div>
+        </header>
+
+        <main class="content" data-directory="subcontractors">
+            <p class="demo-notice">These fictional subcontractors are for demonstration. New subcontractor records are not saved yet.</p>
+            <div class="directory-summary" data-directory-summary></div>
+
+            <section class="card">
+
+                <div class="table-toolbar">
+                    <h2>All Subcontractors</h2>
+                </div>
+                <div class="filters directory-filters">
+                    <label>Search subcontractors<input type="search" class="search" data-directory-search placeholder="Search subcontractors..."></label>
+                    <label>Trade<select class="filter-select" data-filter-column="2"><option value="">All trades</option></select></label>
+                    <label>Status<select class="filter-select" data-filter-column="4"><option value="">All</option></select></label>
+                    <label>Sort by<select class="filter-select" data-directory-sort>
+                        <option value="name-asc">Name (A?Z)</option>
+                        <option value="name-desc">Name (Z?A)</option>
+                    </select></label>
+                    <button type="button" class="btn-outline" data-directory-clear>Clear filters</button>
+                </div>
+                <p class="directory-count" data-directory-count role="status" aria-live="polite"></p>
+
+                <div class="table-wrap">
+                    <table id="subs-table">
+                        <thead>
+                            <tr>
+                                <th>Subcontractor Name</th>
+                                <th>Company</th>
+                                <th>Trade/Specialty</th>
+                                <th>Assigned Projects</th>
+                                <th>Status</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <!-- Static sample data (fictional) -->
+                            <tr class="sub-row">
+                                <td>John Miller</td>
+                                <td>Miller Electrical Services</td>
+                                <td>Electrical</td>
+                                <td>2</td>
+                                <td><span class="status completed">Active</span></td>
+                            </tr>
+                            <tr class="sub-row">
+                                <td>Carlos Rodriguez</td>
+                                <td>Rodriguez Plumbing LLC</td>
+                                <td>Plumbing</td>
+                                <td>1</td>
+                                <td><span class="status completed">Active</span></td>
+                            </tr>
+                            <tr class="sub-row">
+                                <td>David Thompson</td>
+                                <td>Thompson Roofing</td>
+                                <td>Roofing</td>
+                                <td>1</td>
+                                <td><span class="status planning">Inactive</span></td>
+                            </tr>
+
+                            <tr class="sub-row">
+                                <td>Priya Patel</td>
+                                <td>Patel HVAC Services</td>
+                                <td>Heating &amp; Cooling</td>
+                                <td>3</td>
+                                <td><span class="status completed">Active</span></td>
+                            </tr>
+                            <tr class="sub-row">
+                                <td>Marcus Reed</td>
+                                <td>Reed Concrete Works</td>
+                                <td>Concrete &amp; Foundations</td>
+                                <td>2</td>
+                                <td><span class="status completed">Active</span></td>
+                            </tr>
+                            <tr class="sub-row">
+                                <td>Ashley Nguyen</td>
+                                <td>Nguyen Custom Cabinets</td>
+                                <td>Cabinetry &amp; Millwork</td>
+                                <td>1</td>
+                                <td><span class="status completed">Active</span></td>
+                            </tr>
+                            <tr class="sub-row">
+                                <td>Luis Martinez</td>
+                                <td>Martinez Flooring Co.</td>
+                                <td>Flooring &amp; Tile</td>
+                                <td>2</td>
+                                <td><span class="status completed">Active</span></td>
+                            </tr>
+                            <tr class="sub-row">
+                                <td>Nicole Brooks</td>
+                                <td>Brooks Painting Studio</td>
+                                <td>Interior &amp; Exterior Painting</td>
+                                <td>1</td>
+                                <td><span class="status completed">Active</span></td>
+                            </tr>
+                            <tr class="sub-row">
+                                <td>Kevin Wilson</td>
+                                <td>Wilson Framing Crew</td>
+                                <td>Framing &amp; Carpentry</td>
+                                <td>0</td>
+                                <td><span class="status planning">Inactive</span></td>
+                            </tr>
+                            <tr class="sub-row">
+                                <td>Tanya Robinson</td>
+                                <td>Robinson Landscape Design</td>
+                                <td>Landscaping</td>
+                                <td>1</td>
+                                <td><span class="status completed">Active</span></td>
+                            </tr>
+                            <tr data-directory-empty hidden>
+                                <td colspan="5">No subcontractors match your search or filters. Try a different search or clear the filters.</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+
+        </main>
+    </div>
+</div>
+
+<script src="{{ url_for('static', filename='js/directory.js') }}" defer></script>
+</body>
+</html>

@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Project Schedule | Buff Bison Construction</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+<div class="app">
+
+    <!-- ===== SIDEBAR ===== -->
+    {% set active_page = 'schedule' %}
+    {% include '_sidebar.html' %}
+
+    <!-- ===== MAIN CONTENT ===== -->
+    <div class="main">
+
+        <header class="header">
+            <div>
+                <h1>Project Schedule</h1>
+                <p class="welcome">Manage project tasks, deadlines, and progress in one place.</p>
+            </div>
+            <div class="header-right">
+                <label for="sch-project-select" class="filter-label">Project:</label>
+                <select id="sch-project-select" class="filter-select">
+                    <option value="all">All Projects</option>
+                </select>
+                <div class="profile">
+                    <span class="avatar">{{ user_name[0] }}</span>
+                    <span class="profile-name">{{ user_name }}</span>
+                </div>
+            </div>
+        </header>
+
+        <main class="content sch-page">
+
+            <p class="demo-notice">
+                <strong>Demo data:</strong> These are sample tasks. Tasks you add, edit, complete, or delete
+                are kept only in this browser tab and reset when the page is reloaded.
+            </p>
+
+            <!-- Summary cards (filled in by schedule.js) -->
+            <section class="cards" aria-label="Task summary" aria-live="polite">
+                <div class="card summary">
+                    <p class="summary-label">Total Tasks</p>
+                    <p class="summary-value" id="sch-total-count">0</p>
+                </div>
+                <div class="card summary">
+                    <p class="summary-label">Completed Tasks</p>
+                    <p class="summary-value" id="sch-completed-count">0</p>
+                </div>
+                <div class="card summary">
+                    <p class="summary-label">In Progress Tasks</p>
+                    <p class="summary-value" id="sch-progress-count">0</p>
+                </div>
+                <div class="card summary" id="sch-overdue-card">
+                    <p class="summary-label">Overdue Tasks</p>
+                    <p class="summary-value" id="sch-overdue-count">0</p>
+                    <p class="summary-note">Not completed and past the due date</p>
+                </div>
+            </section>
+
+            <!-- Upcoming deadlines -->
+            <section class="card section-gap">
+                <h2>Upcoming Deadlines</h2>
+                <p class="help-text">Unfinished tasks that are overdue or due in the next 14 days.</p>
+                <div id="sch-deadline-list"></div>
+            </section>
+
+            <!-- Task table -->
+            <section class="card">
+                <div class="table-toolbar">
+                    <h2>Tasks</h2>
+                    <div class="filters">
+                        <label for="sch-status-filter" class="filter-label">Status:</label>
+                        <select id="sch-status-filter" class="filter-select">
+                            <option value="all">All</option>
+                            <option value="Not Started">Not Started</option>
+                            <option value="In Progress">In Progress</option>
+                            <option value="Completed">Completed</option>
+                            <option value="overdue">Overdue only</option>
+                        </select>
+                        <label for="sch-sort-order" class="filter-label">Due date:</label>
+                        <select id="sch-sort-order" class="filter-select">
+                            <option value="soonest">Soonest first</option>
+                            <option value="latest">Latest first</option>
+                        </select>
+                        <button type="button" class="btn" id="sch-add-task-btn">+ Add Task</button>
+                    </div>
+                </div>
+
+                <p class="status-message" id="sch-message" role="status"></p>
+
+                <div class="table-wrap">
+                    <table class="sch-task-table">
+                        <thead>
+                            <tr>
+                                <th scope="col">Task Name</th>
+                                <th scope="col">Project</th>
+                                <th scope="col">Assigned To</th>
+                                <th scope="col">Start Date</th>
+                                <th scope="col">Due Date</th>
+                                <th scope="col">Priority</th>
+                                <th scope="col">Status</th>
+                                <th scope="col">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="sch-task-body"></tbody>
+                    </table>
+                </div>
+            </section>
+
+        </main>
+    </div>
+</div>
+
+<!-- ===== Add / Edit Task form (pop-up dialog) ===== -->
+<dialog class="modal" id="sch-task-dialog" aria-labelledby="sch-dialog-title">
+    <form id="sch-task-form" novalidate>
+        <h2 id="sch-dialog-title">Add Task</h2>
+        <p class="help-text">Fields marked <span class="required">*</span> are required.</p>
+
+        <div class="form-errors" id="sch-form-errors" role="alert"></div>
+
+        <div class="form-grid">
+            <div class="form-field full">
+                <label for="sch-form-name">Task Name <span class="required">*</span></label>
+                <input type="text" id="sch-form-name" name="name" maxlength="150" required>
+            </div>
+            <div class="form-field">
+                <label for="sch-form-project">Select Project <span class="required">*</span></label>
+                <select id="sch-form-project" name="project_id" required>
+                    <option value="">Select a project</option>
+                </select>
+            </div>
+            <div class="form-field">
+                <label for="sch-form-assigned">Assigned To</label>
+                <input type="text" id="sch-form-assigned" name="assigned_to" maxlength="100">
+            </div>
+            <div class="form-field full">
+                <label for="sch-form-description">Description</label>
+                <textarea id="sch-form-description" name="description" maxlength="500"></textarea>
+            </div>
+            <div class="form-field">
+                <label for="sch-form-start">Start Date</label>
+                <input type="date" id="sch-form-start" name="start_date">
+            </div>
+            <div class="form-field">
+                <label for="sch-form-due">Due Date <span class="required">*</span></label>
+                <input type="date" id="sch-form-due" name="due_date" required>
+            </div>
+            <div class="form-field">
+                <label for="sch-form-priority">Priority</label>
+                <select id="sch-form-priority" name="priority"></select>
+            </div>
+            <div class="form-field">
+                <label for="sch-form-status">Status</label>
+                <select id="sch-form-status" name="status"></select>
+            </div>
+        </div>
+
+        <div class="form-actions modal-actions">
+            <button type="button" class="btn-outline" id="sch-cancel-btn">Cancel</button>
+            <button type="submit" class="btn">Save</button>
+        </div>
+    </form>
+</dialog>
+
+<!-- Demo data from Flask (app.py -> demo_data.py). "tojson" safely converts the Python data to JSON. -->
+<script id="sch-data" type="application/json">{{ schedule_data | tojson }}</script>
+<script src="{{ url_for('static', filename='js/schedule.js') }}"></script>
+</body>
+</html>

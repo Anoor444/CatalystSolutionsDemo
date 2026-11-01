@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Documents | Buff Bison Construction</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+<div class="app">
+
+    <!-- ===== SIDEBAR (shared file) ===== -->
+    {% set active_page = 'documents' %}
+    {% include '_sidebar.html' %}
+
+    <!-- ===== MAIN CONTENT ===== -->
+    <div class="main">
+
+        <header class="header">
+            <div>
+                <h1>Documents</h1>
+                <p class="welcome">Manage project documents, invoices, receipts, and estimates.</p>
+            </div>
+            <div class="header-right">
+                {% if current_role == 'employee' %}
+                <a href="{{ url_for('upload_document') }}" class="btn">+ Upload Document</a>
+                {% endif %}
+                <div class="profile">
+                    <span class="avatar">{{ user_name[0] }}</span>
+                    <span class="profile-name">{{ user_name }}</span>
+                </div>
+            </div>
+        </header>
+
+        <main class="content" data-directory="documents">
+            <p class="demo-notice">Sample documents are fictional previews without downloadable files. Uploaded documents can be downloaded using their names.</p>
+            <div class="directory-summary" data-directory-summary></div>
+
+            <section class="card">
+
+                <div class="table-toolbar">
+                    <h2>All Documents</h2>
+                </div>
+                <div class="filters directory-filters">
+                    <label>Search documents<input type="search" class="search" data-directory-search placeholder="Search documents..."></label>
+                    <label>Document type<select class="filter-select" data-filter-column="1"><option value="">All document types</option></select></label>
+                    <label>Project<select class="filter-select" data-filter-column="2"><option value="">All projects</option></select></label>
+                    <label>Status<select class="filter-select" data-filter-column="4"><option value="">All</option></select></label>
+                    <label>Sort by<select class="filter-select" data-directory-sort>
+                        <option value="name-asc">Name (A?Z)</option>
+                        <option value="name-desc">Name (Z?A)</option>
+                        <option value="date-desc">Newest first</option>
+                        <option value="date-asc">Oldest first</option>
+                    </select></label>
+                    <button type="button" class="btn-outline" data-directory-clear>Clear filters</button>
+                </div>
+                <p class="directory-count" data-directory-count role="status" aria-live="polite"></p>
+
+                <div class="table-wrap">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Document Name</th>
+                                <th>Document Type</th>
+                                <th>Associated Project</th>
+                                <th>Date Added</th>
+                                <th>Status</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for document in documents %}
+                                <tr>
+                                    <td>
+                                        <a class="text-link" href="{{ url_for('download_document', document_id=document.id) }}">
+                                            {{ document.filename }}
+                                        </a>
+                                    </td>
+                                    <td>{{ document.document_type }}</td>
+                                    <td>{{ document.project_name }}</td>
+                                    <td>{{ document.date_added }}</td>
+                                    <td><span class="status progress">Uploaded</span></td>
+                                </tr>
+                            {% endfor %}
+                                {% for document in sample_documents %}
+                                    <tr>
+                                        <td>{{ document.filename }}</td>
+                                        <td>{{ document.document_type }}</td>
+                                        <td>{{ document.project_name }}</td>
+                                        <td>{{ document.date_added }}</td>
+                                        <td><span class="status planning">Sample</span></td>
+                                    </tr>
+                                {% endfor %}
+                            <tr data-directory-empty hidden>
+                                <td colspan="5">No documents match your search or filters. Try a different search or clear the filters.</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+
+        </main>
+    </div>
+</div>
+<script src="{{ url_for('static', filename='js/directory.js') }}" defer></script>
+</body>
+</html>

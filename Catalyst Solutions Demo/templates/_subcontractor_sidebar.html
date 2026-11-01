@@ -1,0 +1,19 @@
+<aside class="sidebar" aria-label="Subcontractor portal">
+    <div class="brand">
+        <img src="{{ url_for('static', filename='css/logo.png') }}" alt="Buff Bison Logo" class="logo-img">
+        <span class="brand-name">BUFF BISON</span>
+        <span class="brand-sub">CONSTRUCTION</span>
+    </div>
+    <nav class="nav" aria-label="Main navigation">
+        {% for endpoint, page, label, symbol in [('dashboard', 'dashboard', 'Dashboard', '&#8962;'), ('projects', 'projects', 'My Assigned Projects', '&#9635;'), ('photos', 'photos', 'Progress Photos', '&#9689;'), ('subcontractor_invoices', 'invoices', 'My Invoices', '$')] %}
+        <a href="{{ url_for(endpoint) }}" class="nav-link {% if active_page == page %}active{% endif %}" {% if active_page == page %}aria-current="page"{% endif %}><span class="icon" aria-hidden="true">{{ symbol|safe }}</span> {{ label }}</a>
+        {% endfor %}
+    </nav>
+    <nav class="nav nav-bottom" aria-label="Account navigation">
+        <a href="{{ url_for('settings') }}" class="nav-link {% if active_page == 'settings' %}active{% endif %}" {% if active_page == 'settings' %}aria-current="page"{% endif %}><span class="icon" aria-hidden="true">&#9881;</span> Settings</a>
+        <form method="POST" action="{{ url_for('logout') }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <button type="submit" class="nav-link logout-button"><span class="icon" aria-hidden="true">&#10140;</span> Logout</button>
+        </form>
+    </nav>
+</aside>

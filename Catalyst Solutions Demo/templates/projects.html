@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Projects | Buff Bison Construction</title>
+    <title>{% if current_role == 'client' %}My Projects{% else %}Projects{% endif %} | Buff Bison Construction</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
 </head>
 <body>
@@ -18,11 +18,13 @@
 
         <header class="header">
             <div>
-                <h1>Projects</h1>
-                <p class="welcome">Manage and track all construction projects</p>
+                <h1>{% if current_role == 'client' %}My Projects{% else %}Projects{% endif %}</h1>
+                <p class="welcome">{% if current_role == 'client' %}View project progress and details{% else %}Manage and track all construction projects{% endif %}</p>
             </div>
             <div class="header-right">
+                {% if current_role == 'employee' %}
                 <a href="{{ url_for('new_project') }}" class="btn">+ New Project</a>
+                {% endif %}
                 <div class="profile">
                     <span class="avatar">{{ user_name[0] }}</span>
                     <span class="profile-name">{{ user_name }}</span>
@@ -33,6 +35,7 @@
         <main class="content">
 
             <!-- Summary cards (sample values) -->
+            {% if current_role != 'client' %}
             <section class="cards">
                 <div class="card summary">
                     <p class="summary-label">Total Projects</p>
@@ -51,12 +54,13 @@
                     <p class="summary-value">1</p>
                 </div>
             </section>
+            {% endif %}
 
             <!-- All projects table -->
             <section class="card">
 
                 <div class="table-toolbar">
-                    <h2>All Projects</h2>
+                    <h2>{% if current_role == 'client' %}Your Projects{% else %}All Projects{% endif %}</h2>
                     <div class="filters">
                         <input type="search" id="project-search" class="search"
                                placeholder="Search projects or clients...">
@@ -76,11 +80,15 @@
                         <thead>
                             <tr>
                                 <th>Project</th>
+                                {% if current_role != 'client' %}
                                 <th>Client</th>
                                 <th>Project Manager</th>
+                                {% endif %}
                                 <th>Status</th>
+                                {% if current_role != 'client' %}
                                 <th>Budget</th>
                                 <th>Actual Cost</th>
+                                {% endif %}
                                 <th>Progress</th>
                                 <th>Due Date</th>
                                 <th>Actions</th>
@@ -89,52 +97,196 @@
                         <tbody>
                             <tr class="project-row" data-status="In Progress">
                                 <td>Riverstone Kitchen Remodel</td>
+                                {% if current_role != 'client' %}
                                 <td>Sarah Johnson</td>
                                 <td>Daniel Carter</td>
+                                {% endif %}
                                 <td><span class="status progress">In Progress</span></td>
+                                {% if current_role != 'client' %}
                                 <td>$48,500</td>
                                 <td>$31,200</td>
+                                {% endif %}
                                 <td><div class="bar"><div class="bar-fill" style="width: 65%;"></div></div><span class="pct">65%</span></td>
                                 <td>Nov 15, 2026</td>
                                 <td><a href="{{ url_for('project_details', project_id=1) }}" class="btn-outline">View</a></td>
                             </tr>
                             <tr class="project-row" data-status="In Progress">
                                 <td>Sugar Land Roof Replacement</td>
+                                {% if current_role != 'client' %}
                                 <td>Michael Thompson</td>
                                 <td>Daniel Carter</td>
+                                {% endif %}
                                 <td><span class="status progress">In Progress</span></td>
+                                {% if current_role != 'client' %}
                                 <td>$22,000</td>
                                 <td>$13,800</td>
+                                {% endif %}
                                 <td><div class="bar"><div class="bar-fill" style="width: 55%;"></div></div><span class="pct">55%</span></td>
                                 <td>Oct 28, 2026</td>
                                 <td><a href="{{ url_for('project_details', project_id=2) }}" class="btn-outline">View</a></td>
                             </tr>
                             <tr class="project-row" data-status="Planning">
                                 <td>Memorial Bathroom Renovation</td>
+                                {% if current_role != 'client' %}
                                 <td>Emily Davis</td>
                                 <td>James Wilson</td>
+                                {% endif %}
                                 <td><span class="status planning">Planning</span></td>
+                                {% if current_role != 'client' %}
                                 <td>$35,750</td>
                                 <td>$2,500</td>
+                                {% endif %}
                                 <td><div class="bar"><div class="bar-fill" style="width: 10%;"></div></div><span class="pct">10%</span></td>
                                 <td>Dec 12, 2026</td>
                                 <td><a href="{{ url_for('project_details', project_id=3) }}" class="btn-outline">View</a></td>
                             </tr>
                             <tr class="project-row" data-status="In Progress">
                                 <td>Katy Home Addition</td>
+                                {% if current_role != 'client' %}
                                 <td>Robert Garcia</td>
                                 <td>James Wilson</td>
+                                {% endif %}
                                 <td><span class="status progress">In Progress</span></td>
+                                {% if current_role != 'client' %}
                                 <td>$92,000</td>
                                 <td>$44,600</td>
+                                {% endif %}
                                 <td><div class="bar"><div class="bar-fill" style="width: 48%;"></div></div><span class="pct">48%</span></td>
                                 <td>Jan 20, 2027</td>
                                 <td><a href="{{ url_for('project_details', project_id=4) }}" class="btn-outline">View</a></td>
                             </tr>
 
+                            <tr class="project-row" data-status="In Progress">
+                                <td>Cypress Storm Damage Repair</td>
+                                {% if current_role != 'client' %}
+                                <td>Robert Nguyen</td>
+                                <td>Carlos Reyes</td>
+                                {% endif %}
+                                <td><span class="status progress">In Progress</span></td>
+                                {% if current_role != 'client' %}
+                                <td>$32,750</td>
+                                <td>$14,700</td>
+                                {% endif %}
+                                <td><div class="bar"><div class="bar-fill" style="width: 45%;"></div></div><span class="pct">45%</span></td>
+                                <td>Dec 05, 2026</td>
+                                <td><a href="{{ url_for('project_details', project_id=5) }}" class="btn-outline">View</a></td>
+                            </tr>
+
+                            <tr class="project-row" data-status="In Progress">
+                                <td>Heights Garage Conversion</td>
+                                {% if current_role != 'client' %}
+                                <td>Olivia Martinez</td>
+                                <td>Daniel Carter</td>
+                                {% endif %}
+                                <td><span class="status progress">In Progress</span></td>
+                                {% if current_role != 'client' %}
+                                <td>$56,800</td>
+                                <td>$21,400</td>
+                                {% endif %}
+                                <td><div class="bar"><div class="bar-fill" style="width: 38%;"></div></div><span class="pct">38%</span></td>
+                                <td>Jan 08, 2027</td>
+                                <td><a href="{{ url_for('project_details', project_id=6) }}" class="btn-outline">View</a></td>
+                            </tr>
+
+                            <tr class="project-row" data-status="In Progress">
+                                <td>Pearland Patio Extension</td>
+                                {% if current_role != 'client' %}
+                                <td>David Chen</td>
+                                <td>Carlos Reyes</td>
+                                {% endif %}
+                                <td><span class="status progress">In Progress</span></td>
+                                {% if current_role != 'client' %}
+                                <td>$18,900</td>
+                                <td>$14,200</td>
+                                {% endif %}
+                                <td><div class="bar"><div class="bar-fill" style="width: 75%;"></div></div><span class="pct">75%</span></td>
+                                <td>Nov 20, 2026</td>
+                                <td><a href="{{ url_for('project_details', project_id=7) }}" class="btn-outline">View</a></td>
+                            </tr>
+
+                            <tr class="project-row" data-status="In Progress">
+                                <td>Spring Office Build-Out</td>
+                                {% if current_role != 'client' %}
+                                <td>Lakeside Dental Group</td>
+                                <td>James Wilson</td>
+                                {% endif %}
+                                <td><span class="status progress">In Progress</span></td>
+                                {% if current_role != 'client' %}
+                                <td>$124,000</td>
+                                <td>$81,500</td>
+                                {% endif %}
+                                <td><div class="bar"><div class="bar-fill" style="width: 68%;"></div></div><span class="pct">68%</span></td>
+                                <td>Dec 18, 2026</td>
+                                <td><a href="{{ url_for('project_details', project_id=8) }}" class="btn-outline">View</a></td>
+                            </tr>
+
+                            <tr class="project-row" data-status="In Progress">
+                                <td>West University Flooring Upgrade</td>
+                                {% if current_role != 'client' %}
+                                <td>Rachel Morgan</td>
+                                <td>Daniel Carter</td>
+                                {% endif %}
+                                <td><span class="status progress">In Progress</span></td>
+                                {% if current_role != 'client' %}
+                                <td>$27,600</td>
+                                <td>$23,100</td>
+                                {% endif %}
+                                <td><div class="bar"><div class="bar-fill" style="width: 88%;"></div></div><span class="pct">88%</span></td>
+                                <td>Nov 10, 2026</td>
+                                <td><a href="{{ url_for('project_details', project_id=9) }}" class="btn-outline">View</a></td>
+                            </tr>
+
+                            <tr class="project-row" data-status="Planning">
+                                <td>Bellaire Outdoor Kitchen</td>
+                                {% if current_role != 'client' %}
+                                <td>Marcus Williams</td>
+                                <td>Carlos Reyes</td>
+                                {% endif %}
+                                <td><span class="status planning">Planning</span></td>
+                                {% if current_role != 'client' %}
+                                <td>$39,500</td>
+                                <td>$1,800</td>
+                                {% endif %}
+                                <td><div class="bar"><div class="bar-fill" style="width: 5%;"></div></div><span class="pct">5%</span></td>
+                                <td>Feb 12, 2027</td>
+                                <td><a href="{{ url_for('project_details', project_id=10) }}" class="btn-outline">View</a></td>
+                            </tr>
+
+                            <tr class="project-row" data-status="Planning">
+                                <td>Richmond Primary Suite Addition</td>
+                                {% if current_role != 'client' %}
+                                <td>Sophia Patel</td>
+                                <td>James Wilson</td>
+                                {% endif %}
+                                <td><span class="status planning">Planning</span></td>
+                                {% if current_role != 'client' %}
+                                <td>$108,000</td>
+                                <td>$6,500</td>
+                                {% endif %}
+                                <td><div class="bar"><div class="bar-fill" style="width: 8%;"></div></div><span class="pct">8%</span></td>
+                                <td>Mar 26, 2027</td>
+                                <td><a href="{{ url_for('project_details', project_id=11) }}" class="btn-outline">View</a></td>
+                            </tr>
+
+                            <tr class="project-row" data-status="Completed">
+                                <td>Clear Lake Deck Restoration</td>
+                                {% if current_role != 'client' %}
+                                <td>William Anderson</td>
+                                <td>Carlos Reyes</td>
+                                {% endif %}
+                                <td><span class="status completed">Completed</span></td>
+                                {% if current_role != 'client' %}
+                                <td>$16,400</td>
+                                <td>$15,950</td>
+                                {% endif %}
+                                <td><div class="bar"><div class="bar-fill" style="width: 100%;"></div></div><span class="pct">100%</span></td>
+                                <td>Oct 23, 2026</td>
+                                <td><a href="{{ url_for('project_details', project_id=12) }}" class="btn-outline">View</a></td>
+                            </tr>
+
                             <!-- Shown by projects.js when no rows match the filters -->
                             <tr id="no-results" class="empty-row" style="display: none;">
-                                <td colspan="9">No projects match your search.</td>
+                                <td colspan="{% if current_role == 'client' %}5{% else %}9{% endif %}">No projects match your search.</td>
                             </tr>
                         </tbody>
                     </table>

@@ -9,9 +9,8 @@
 <body>
 <div class="app">
 
-       <!-- ===== SIDEBAR ===== -->
     {% set active_page = 'dashboard' %}
-    {% include "_sidebar.html" %}
+    {% include '_sidebar.html' %}
 
     <!-- ===== MAIN CONTENT ===== -->
     <div class="main">
@@ -20,14 +19,14 @@
         <header class="header">
             <div>
                 <h1>Dashboard</h1>
-                <p class="welcome">Welcome back, Daniel Carter</p>
+                <p class="welcome">Welcome back, {{ user_name }}</p>
             </div>
             <div class="header-right">
                 <input type="search" class="search" placeholder="Search projects, clients, invoices...">
-                <a href="#" class="btn">+ New Project</a>
+                {% if current_role == 'employee' %}<a href="{{ url_for('new_project') }}" class="btn">+ New Project</a>{% endif %}
                 <div class="profile">
-                    <span class="avatar">D</span>
-                    <span class="profile-name">Daniel Carter</span>
+                    <span class="avatar">{{ user_name[0] }}</span>
+                    <span class="profile-name">{{ user_name }}</span>
                 </div>
             </div>
         </header>
@@ -89,7 +88,7 @@
                                     <td><span class="status near">Near Completion</span></td>
                                     <td>$24,200</td>
                                     <td><div class="bar"><div class="bar-fill" style="width: 90%;"></div></div><span class="pct">90%</span></td>
-                                    <td>Oct 12, 2026</td>
+                                    <td>Nov 12, 2026</td>
                                 </tr>
                                 <tr>
                                     <td>Master Bath Addition – Sugar Land</td>
@@ -109,6 +108,45 @@
                                     <td><div class="bar"><div class="bar-fill" style="width: 45%;"></div></div><span class="pct">45%</span></td>
                                     <td>Dec 05, 2026</td>
                                 </tr>
+                                <tr>
+                                    <td>Heights Garage Conversion</td>
+                                    <td>Olivia Martinez</td>
+                                    <td>Daniel Carter</td>
+                                    <td><span class="status progress">In Progress</span></td>
+                                    <td>$56,800</td>
+                                    <td><div class="bar"><div class="bar-fill" style="width: 38%;"></div></div><span class="pct">38%</span></td>
+                                    <td>Jan 08, 2027</td>
+                                </tr>
+
+                                <tr>
+                                    <td>Pearland Patio Extension</td>
+                                    <td>David Chen</td>
+                                    <td>Carlos Reyes</td>
+                                    <td><span class="status progress">In Progress</span></td>
+                                    <td>$18,900</td>
+                                    <td><div class="bar"><div class="bar-fill" style="width: 75%;"></div></div><span class="pct">75%</span></td>
+                                    <td>Nov 20, 2026</td>
+                                </tr>
+
+                                <tr>
+                                    <td>Spring Office Build-Out</td>
+                                    <td>Lakeside Dental Group</td>
+                                    <td>James Wilson</td>
+                                    <td><span class="status progress">In Progress</span></td>
+                                    <td>$124,000</td>
+                                    <td><div class="bar"><div class="bar-fill" style="width: 68%;"></div></div><span class="pct">68%</span></td>
+                                    <td>Dec 18, 2026</td>
+                                </tr>
+
+                                <tr>
+                                    <td>West University Flooring Upgrade</td>
+                                    <td>Rachel Morgan</td>
+                                    <td>Daniel Carter</td>
+                                    <td><span class="status progress">In Progress</span></td>
+                                    <td>$27,600</td>
+                                    <td><div class="bar"><div class="bar-fill" style="width: 88%;"></div></div><span class="pct">88%</span></td>
+                                    <td>Nov 10, 2026</td>
+                                </tr>
                             </tbody>
                         </table>
                     </div>
@@ -122,19 +160,27 @@
                         <ul class="task-list">
                             <li>
                                 <p class="task-name">Final roof inspection</p>
-                                <p class="task-meta">Roof Replacement – Katy · Oct 7</p>
+                                <p class="task-meta">Roof Replacement – Katy · Nov 3</p>
                             </li>
                             <li>
                                 <p class="task-name">Order kitchen cabinets</p>
-                                <p class="task-meta">Kitchen Remodel – Oak Forest · Oct 9</p>
+                                <p class="task-meta">Kitchen Remodel – Oak Forest · Nov 4</p>
                             </li>
                             <li>
                                 <p class="task-name">Permit submission</p>
-                                <p class="task-meta">Master Bath Addition – Sugar Land · Oct 14</p>
+                                <p class="task-meta">Master Bath Addition – Sugar Land · Nov 5</p>
                             </li>
                             <li>
                                 <p class="task-name">Drywall delivery</p>
-                                <p class="task-meta">Storm Damage Repair – Cypress · Oct 16</p>
+                                <p class="task-meta">Storm Damage Repair – Cypress · Nov 6</p>
+                            </li>
+                            <li>
+                                <p class="task-name">Confirm electrical rough-in inspection</p>
+                                <p class="task-meta">Heights Garage Conversion &middot; Nov 6</p>
+                            </li>
+                            <li>
+                                <p class="task-name">Review flooring punch list</p>
+                                <p class="task-meta">West University Flooring Upgrade &middot; Nov 9</p>
                             </li>
                         </ul>
                     </section>
@@ -146,6 +192,8 @@
                             <li><span class="dot"></span>Progress photos uploaded <small>Yesterday</small></li>
                             <li><span class="dot"></span>New estimate created <small>Yesterday</small></li>
                             <li><span class="dot"></span>Change order submitted <small>2 days ago</small></li>
+                            <li><span class="dot"></span>Pearland Patio Extension concrete delivery confirmed <small>2 days ago</small></li>
+                            <li><span class="dot"></span>Clear Lake Deck Restoration completed <small>Oct 23, 2026</small></li>
                         </ul>
                     </section>
 
