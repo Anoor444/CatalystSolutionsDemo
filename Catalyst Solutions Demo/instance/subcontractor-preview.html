@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Subcontractor Dashboard | Buff Bison Construction</title>
+    <link rel="stylesheet" href="file:///C:/Users/albin/OneDrive/Desktop/CIS%204375%20Capstone/CatalystSolutionsDemo/Catalyst%20Solutions%20Demo/static/css/style.css">
+</head>
+<body>
+<div class="app">
+    
+    <!-- Shared sidebar. The page sets active_page before including this file. -->
+
+<aside class="sidebar" aria-label="Subcontractor portal">
+    <div class="brand">
+        <img src="file:///C:/Users/albin/OneDrive/Desktop/CIS%204375%20Capstone/CatalystSolutionsDemo/Catalyst%20Solutions%20Demo/static/css/logo.png" alt="Buff Bison Logo" class="logo-img">
+        <span class="brand-name">BUFF BISON</span>
+        <span class="brand-sub">CONSTRUCTION</span>
+    </div>
+    <nav class="nav" aria-label="Main navigation">
+        
+        <a href="/" class="nav-link active" aria-current="page"><span class="icon" aria-hidden="true">&#8962;</span> Dashboard</a>
+        
+        <a href="/projects" class="nav-link " ><span class="icon" aria-hidden="true">&#9635;</span> My Assigned Projects</a>
+        
+        <a href="/photos" class="nav-link " ><span class="icon" aria-hidden="true">&#9689;</span> Progress Photos</a>
+        
+        <a href="/subcontractor/invoices" class="nav-link " ><span class="icon" aria-hidden="true">$</span> My Invoices</a>
+        
+    </nav>
+    <nav class="nav nav-bottom" aria-label="Account navigation">
+        <a href="/settings" class="nav-link " ><span class="icon" aria-hidden="true">&#9881;</span> Settings</a>
+        <form method="POST" action="/logout">
+            <input type="hidden" name="csrf_token" value="JGUgLX_WHwQXGrdKofbxDaIQUGg2fKJtnHdDYUyu3Tk">
+            <button type="submit" class="nav-link logout-button"><span class="icon" aria-hidden="true">&#10140;</span> Logout</button>
+        </form>
+    </nav>
+</aside>
+
+
+    <div class="main">
+        <header class="header">
+            <div>
+                <h1>Dashboard</h1>
+                <p class="welcome">Welcome back, Demo Subcontractor</p>
+            </div>
+            <div class="header-right">
+                <div class="profile">
+                    <span class="avatar">D</span>
+                    <span class="profile-name">Demo Subcontractor</span>
+                </div>
+            </div>
+        </header>
+
+        <main class="content">
+            <section class="card client-dashboard-intro">
+                <p>View your assigned projects, share progress photos, and check invoice status.</p>
+                <a href="/projects" class="btn">View Assigned Projects</a>
+            </section>
+
+            <section class="cards">
+                <a href="/projects" class="card summary">
+                    <p class="summary-label">Assigned Projects</p>
+                    <p class="summary-value">0</p>
+                </a>
+                <a href="/projects" class="card summary">
+                    <p class="summary-label">Projects In Progress</p>
+                    <p class="summary-value">0</p>
+                </a>
+                <a href="/subcontractor/invoices" class="card summary">
+                    <p class="summary-label">Open Invoices</p>
+                    <p class="summary-value">0</p>
+                </a>
+            </section>
+
+            <div class="grid">
+                <section class="card">
+                    <h2>Project Progress</h2>
+                    <div class="table-wrap">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>Project</th>
+                                    <th>Status</th>
+                                    <th>Progress</th>
+                                    <th>Target Date</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                
+                                <tr><td colspan="4">No projects are available.</td></tr>
+                                
+                            </tbody>
+                        </table>
+                    </div>
+                </section>
+
+                <section class="card">
+                    <h2>Needs Your Attention</h2>
+                    <ul class="task-list">
+                        <li>
+                            <p class="task-name">Progress Photos</p>
+                            <p class="task-meta">Share the latest progress on your assigned projects.</p>
+                            <a href="/photos/upload" class="btn-outline">Upload photos</a>
+                        </li>
+                        
+                        
+                        <li><p class="task-meta">You have no invoices to review.</p></li>
+                        
+                    </ul>
+                </section>
+            </div>
+        </main>
+    </div>
+</div>
+</body>
+</html>
