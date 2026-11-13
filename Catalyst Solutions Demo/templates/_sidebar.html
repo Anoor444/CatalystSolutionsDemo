@@ -1,3 +1,9 @@
+<script>window.portalContext = {role: {{ current_role|tojson }}, user: {{ session.get('email', '')|tojson }}, name: {{ session.get('user', '')|tojson }}};</script>
+<link rel="stylesheet" href="{{ url_for('static', filename='css/portal.css') }}">
+<script src="{{ url_for('static', filename='js/demo-seed.js') }}"></script>
+<script src="{{ url_for('static', filename='js/client-demo.js') }}"></script>
+<script src="{{ url_for('static', filename='js/demo-store.js') }}"></script>
+<script src="{{ url_for('static', filename='js/portal.js') }}" defer></script>
 <!-- Shared sidebar. The page sets active_page before including this file. -->
 {% if current_role == 'subcontractor' %}
 {% include '_subcontractor_sidebar.html' %}

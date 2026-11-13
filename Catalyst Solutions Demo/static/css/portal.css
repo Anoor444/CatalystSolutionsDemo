@@ -1,0 +1,10 @@
+.demo-banner{padding:10px 16px;background:#fff4d6;border-left:4px solid #bc8622;margin-bottom:20px;color:#493d23}
+.portal-actions{display:flex;gap:10px;flex-wrap:wrap;margin:16px 0}.portal-dialog{border:0;border-radius:12px;padding:24px;width:min(760px,92vw);max-height:88vh;overflow:auto;box-shadow:0 15px 65px #0005}.portal-dialog::backdrop{background:#0007}.portal-dialog h2{margin-bottom:16px}.portal-dialog label{display:flex;flex-direction:column;gap:6px;margin:12px 0}.portal-dialog input,.portal-dialog select,.portal-dialog textarea{padding:10px;border:1px solid #bbb;border-radius:5px;width:100%;box-sizing:border-box}.portal-dialog table input{min-width:70px}.portal-dialog .table-wrap{overflow-x:auto}.portal-empty{padding:20px;color:#666}.portal-gallery{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:16px}.portal-gallery img{width:100%;max-height:260px;object-fit:contain}.search-results{margin:16px 0}.search-results a{display:block;padding:12px;border-bottom:1px solid #ddd}.portal-error{color:#a32121}.portal-dialog button{cursor:pointer}.portal-dialog [hidden]{display:none!important}
+.project-name-link,
+.project-name-link:visited { color: var(--copper); }
+.project-name-link:hover,
+.project-name-link:focus-visible {
+    color: var(--copper-dark);
+    text-decoration: underline;
+    text-underline-offset: 3px;
+}

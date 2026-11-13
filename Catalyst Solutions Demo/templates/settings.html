@@ -30,6 +30,9 @@
         </header>
 
         <main class="content">
+            {% for message in get_flashed_messages(category_filter=['password_success']) %}
+            <p class="card" role="status">{{ message }}</p>
+            {% endfor %}
             <div class="form-page">
 
                 <!-- Profile information (read-only) -->
@@ -39,10 +42,8 @@
                         <dt>Full Name</dt>
                         <dd>{{ user_name }}</dd>
                         <dt>Email Address</dt>
-                        <!-- Sample value: the login does not store an email yet -->
                         <dd>{{ session.get('email', '') }}</dd>
                         <dt>User Role</dt>
-                        <!-- Sample value: roles are not built yet -->
                         <dd>{{ current_role|capitalize }}</dd>
                     </dl>
                 </section>
@@ -56,9 +57,7 @@
                         <dt>Account Status</dt>
                         <dd><span class="status completed">Active</span></dd>
                     </dl>
-                    <!-- PLACEHOLDER: disabled, password changes are not built yet -->
-                    <button type="button" class="btn" disabled
-                            title="Coming soon: password changes are not built yet">Change Password</button>
+                    <a href="{{ url_for('change_password') }}" class="btn">Change Password</a>
                 </section>
 
             </div>

@@ -2,7 +2,7 @@
 import json
 import os
 import secrets
-import sqlite3
+import click
 from functools import wraps
 from datetime import date
 from uuid import uuid4
@@ -10,6 +10,7 @@ from uuid import uuid4
 from flask import (
     Flask,
     abort,
+    flash,
     redirect,
     render_template,
     request,
@@ -21,8 +22,9 @@ from werkzeug.security import check_password_hash, generate_password_hash
 from werkzeug.utils import secure_filename
 
 from demo_data import get_job_cost_data, get_schedule_data
+from user_database import DuplicateEmailError, UserDatabase
 
-app = Flask(__name__)
+app = Flask(__name__, instance_path=os.environ.get("APP_INSTANCE_PATH"))
 app.config["MAX_CONTENT_LENGTH"] = 16 * 1024 * 1024
 app.config["SESSION_COOKIE_HTTPONLY"] = True
 app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
@@ -33,6 +35,7 @@ DOCUMENT_METADATA_FILE = os.path.join(app.instance_path, "documents.json")
 PHOTO_UPLOAD_FOLDER = os.path.join(app.instance_path, "photo_uploads")
 PHOTO_METADATA_FILE = os.path.join(app.instance_path, "photos.json")
 USER_DATABASE_FILE = os.path.join(app.instance_path, "users.sqlite3")
+user_database = UserDatabase(USER_DATABASE_FILE)
 DEMO_EMAIL = "demo@buffbison.com"
 DEMO_PASSWORD = "Buffbison123"
 DEMO_NAME = "Demo Employee"
@@ -264,52 +267,27 @@ if not app.secret_key:
 
 
 def initialize_user_database():
-    with sqlite3.connect(USER_DATABASE_FILE) as database:
-        database.execute(
-            """
-            CREATE TABLE IF NOT EXISTS users (
-                id INTEGER PRIMARY KEY,
-                email TEXT NOT NULL UNIQUE COLLATE NOCASE,
-                name TEXT NOT NULL,
-                password_hash TEXT NOT NULL,
-                role TEXT NOT NULL CHECK (role IN ('employee', 'subcontractor', 'client'))
-            )
-            """
-        )
-        database.execute(
-            """
-            INSERT OR IGNORE INTO users (email, name, password_hash, role)
-            VALUES (?, ?, ?, 'employee')
-            """,
-            (DEMO_EMAIL, DEMO_NAME, generate_password_hash(DEMO_PASSWORD)),
-        )
-        database.execute(
-            """
-            INSERT OR IGNORE INTO users (email, name, password_hash, role)
-            VALUES (?, ?, ?, 'client')
-            """,
-            (
-                DEMO_CLIENT_EMAIL,
-                DEMO_CLIENT_NAME,
-                generate_password_hash(DEMO_CLIENT_PASSWORD),
-            ),
-        )
-
-
-        database.execute(
-            """
-            INSERT OR IGNORE INTO users (email, name, password_hash, role)
-            VALUES (?, ?, ?, 'subcontractor')
-            """,
-            (
-                DEMO_SUBCONTRACTOR_EMAIL,
-                DEMO_SUBCONTRACTOR_NAME,
-                generate_password_hash(DEMO_SUBCONTRACTOR_PASSWORD),
-            ),
-        )
+    user_database.initialize([
+        (DEMO_EMAIL, DEMO_NAME, generate_password_hash(DEMO_PASSWORD), "employee"),
+        (DEMO_CLIENT_EMAIL, DEMO_CLIENT_NAME, generate_password_hash(DEMO_CLIENT_PASSWORD), "client"),
+        (DEMO_SUBCONTRACTOR_EMAIL, DEMO_SUBCONTRACTOR_NAME,
+         generate_password_hash(DEMO_SUBCONTRACTOR_PASSWORD), "subcontractor"),
+    ])
 
 
 initialize_user_database()
+
+
+@app.cli.command("migrate-sqlite-users")
+@click.option("--source", type=click.Path(exists=True, dir_okay=False), default=USER_DATABASE_FILE)
+@click.option("--replace-existing", is_flag=True, help="Replace matching MySQL accounts with SQLite account details.")
+def migrate_sqlite_users(source, replace_existing):
+    """Copy SQLite accounts and password hashes into the configured MySQL database."""
+    try:
+        imported, skipped = user_database.migrate_sqlite(source, replace_existing)
+    except Exception as error:
+        raise click.ClickException(str(error)) from error
+    click.echo(f"Imported {imported} accounts; skipped {skipped} existing accounts. SQLite source unchanged.")
 
 
 def role_required(*allowed_roles):
@@ -362,12 +340,8 @@ def create_user():
         raise click.ClickException("Display name is required and password must be at least 12 characters.")
 
     try:
-        with sqlite3.connect(USER_DATABASE_FILE) as database:
-            database.execute(
-                "INSERT INTO users (email, name, password_hash, role) VALUES (?, ?, ?, ?)",
-                (email, name, generate_password_hash(password), role),
-            )
-    except sqlite3.IntegrityError as error:
+        user_database.create_user(email, name, generate_password_hash(password), role)
+    except DuplicateEmailError as error:
         raise click.ClickException("An account with that email already exists.") from error
 
     click.echo(f"Created {role} account for {email}.")
@@ -381,12 +355,7 @@ def login():
         email = request.form.get("email", "").strip().lower()
         password = request.form.get("password", "")
 
-        with sqlite3.connect(USER_DATABASE_FILE) as database:
-            database.row_factory = sqlite3.Row
-            user = database.execute(
-                "SELECT id, email, name, password_hash, role FROM users WHERE email = ?",
-                (email,),
-            ).fetchone()
+        user = user_database.find_by_email(email)
 
         if user and check_password_hash(user["password_hash"], password):
             session.clear()
@@ -425,6 +394,11 @@ def forgot_password():
 
 
 @app.route("/")
+def home():
+    return redirect(url_for("login"))
+
+
+@app.route("/dashboard")
 @role_required(*ROLES)
 def dashboard():
     if session["role"] == "subcontractor":
@@ -652,6 +626,39 @@ def new_client():
 @role_required(*ROLES)
 def settings():
     return render_template("settings.html", user_name=session["user"])
+
+
+@app.route("/settings/change-password", methods=["GET", "POST"])
+@role_required(*ROLES)
+def change_password():
+    user = user_database.find_by_id(session["user_id"])
+    if user is None:
+        session.clear()
+        return redirect(url_for("login"))
+
+    error = None
+    if request.method == "POST":
+        current_password = request.form.get("current_password", "")
+        new_password = request.form.get("new_password", "")
+        confirmation = request.form.get("confirm_password", "")
+        if not check_password_hash(user["password_hash"], current_password):
+            error = "Your current password is incorrect."
+        elif not 12 <= len(new_password) <= 128:
+            error = "Your new password must be between 12 and 128 characters."
+        elif new_password != confirmation:
+            error = "The new passwords do not match."
+        elif check_password_hash(user["password_hash"], new_password):
+            error = "Choose a new password different from your current password."
+        elif not user_database.update_password(
+            user["id"], user["password_hash"], generate_password_hash(new_password)
+        ):
+            error = "Your account changed while saving. Please try again."
+        else:
+            session.pop("csrf_token", None)
+            flash("Your password has been changed successfully.", "password_success")
+            return redirect(url_for("settings"))
+
+    return render_template("change_password.html", user_name=session["user"], error=error)
 
 
 @app.route("/documents")

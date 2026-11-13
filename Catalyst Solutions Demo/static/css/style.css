@@ -444,21 +444,21 @@ td:first-child {
 
 .login-box {
     width: 100%;
-    max-width: 400px;
+    max-width: 370px;
     background: var(--white);
     border-top: 4px solid var(--copper);
     border-radius: 6px;
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
-    padding: 36px 32px;
+    padding: 24px;
 }
 
 .login-brand {
     background: var(--navy);
-    padding: 16px 20px;
+    padding: 12px 16px;
     border-radius: 4px;
     color: var(--white);
     text-align: center;
-    margin-bottom: 24px;
+    margin-bottom: 16px;
 }
 
 .login-box h1 {
@@ -468,7 +468,7 @@ td:first-child {
 
 .login-subtitle {
     color: var(--muted);
-    margin-bottom: 20px;
+    margin-bottom: 14px;
 }
 
 .login-box label {
@@ -575,17 +575,17 @@ td:first-child {
     background: #f4f5f7;
     border: 1px solid var(--border);
     color: var(--text);
-    padding: 10px 12px;
+    padding: 8px 10px;
     border-radius: 4px;
-    font-size: 14px;
-    margin-bottom: 16px;
+    font-size: 12px;
+    margin-bottom: 10px;
 }
 
 .login-logo {
     display: block;
-    width: 120px;
+    width: 100px;
     height: auto;
-    margin: 0 auto 18px;
+    margin: 0 auto 12px;
     filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.12));
 }
 /* ========================================
@@ -897,7 +897,41 @@ button.btn:disabled:hover {
 }
 
 /* Space between the details and the button */
-.form-section .info-list + .btn { margin-top: 20px; }
+.form-section .info-list + .btn {
+    display: inline-flex;
+    align-items: center;
+    margin-top: 20px;
+    vertical-align: top;
+}
+
+/* Account password form: readable spacing on every portal. */
+.password-form { max-width: 640px; }
+.password-form .form-section { padding: 28px; }
+.password-form .password-account {
+    color: var(--muted);
+    margin-bottom: 28px;
+    overflow-wrap: anywhere;
+}
+.password-form .form-field { margin-bottom: 24px; }
+.password-form .form-field label { margin-bottom: 9px; }
+.password-form .form-field input { min-height: 44px; }
+.password-form #password-help {
+    display: block;
+    margin-top: 10px;
+    color: var(--muted);
+    font-size: 12px;
+    line-height: 1.6;
+}
+.password-form .portal-error { margin-bottom: 20px; }
+.password-form .portal-actions { margin: 0 0 24px; }
+.password-form .form-actions {
+    padding-top: 20px;
+    border-top: 1px solid var(--border);
+    flex-wrap: wrap;
+}
+@media (max-width: 600px) {
+    .password-form .form-section { padding: 20px; }
+}
 
 /* ========================================
    DISABLED PLACEHOLDER BUTTON
