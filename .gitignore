@@ -1,1 +1,15 @@
+# Local data: database, uploads, secret key and logs (never commit these)
 Catalyst Solutions Demo/instance/
+
+# Python cache files
+__pycache__/
+*.pyc
+
+# Virtual environments
+venv/
+.venv/
+
+# Editor / OS files
+.vscode/
+.DS_Store
+Thumbs.db

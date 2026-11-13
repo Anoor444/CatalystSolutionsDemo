@@ -21,6 +21,7 @@ from flask import (
 from werkzeug.security import check_password_hash, generate_password_hash
 from werkzeug.utils import secure_filename
 
+import database
 from demo_data import get_job_cost_data, get_schedule_data
 from user_database import DuplicateEmailError, UserDatabase
 
@@ -277,6 +278,39 @@ def initialize_user_database():
 
 initialize_user_database()
 
+# Business tables (projects, estimates, invoices, ...) live in the same SQLite file.
+# Creates them from schema.sql and loads sample data the first time. See database.py.
+database.init_app(app, USER_DATABASE_FILE)
+
+
+# ---------- Template formatting helpers ----------
+# Usage in templates: {{ project.budget_amount|currency }}, {{ project.due_date|short_date }},
+# <span class="status {{ project.status|status_class }}">
+
+@app.template_filter("currency")
+def format_currency(value):
+    return f"${float(value or 0):,.0f}"
+
+
+@app.template_filter("short_date")
+def format_short_date(value):
+    if not value:
+        return "—"
+    try:
+        return date.fromisoformat(str(value)[:10]).strftime("%b %d, %Y")
+    except ValueError:
+        return value
+
+
+@app.template_filter("status_class")
+def project_status_class(status):
+    return {
+        "In Progress": "progress",
+        "Planning": "planning",
+        "On Hold": "hold",
+        "Completed": "completed",
+    }.get(status, "planning")
+
 
 @app.cli.command("migrate-sqlite-users")
 @click.option("--source", type=click.Path(exists=True, dir_okay=False), default=USER_DATABASE_FILE)
@@ -449,28 +483,22 @@ def projects():
             user_name=session["user"],
             projects=SAMPLE_CLIENT_PROJECTS,
         )
-    return render_template("projects.html", user_name=session["user"])
+    return render_template(
+        "projects.html",
+        user_name=session["user"],
+        projects=database.get_projects(),
+        counts=database.get_project_counts(),
+    )
 
 @app.route("/estimates")
 @role_required("employee")
 def estimates():
     return render_template("estimates.html", user_name=session["user"])
 
-
 @app.route("/invoices")
 @role_required("employee")
 def invoices():
-    return render_template(
-        "client_records.html",
-        user_name=session["user"],
-        active_page="invoices",
-        page_title="Invoices",
-        page_description="Review sample project invoices.",
-        records=SAMPLE_CLIENT_INVOICES,
-        first_column="Invoice",
-        first_value="invoice",
-        records_label="Project Invoices",
-    )
+    return render_template("invoices.html", user_name=session["user"])
 
 
 @app.route("/job-costs")
@@ -554,11 +582,80 @@ def subcontractor_invoices():
 @app.route("/new-project", methods=["GET", "POST"])
 @role_required("employee")
 def new_project():
-    if request.method == "POST":
-        # Nothing is saved yet. Later: insert the form data into MySQL here.
-        return redirect(url_for("projects"))
+    managers = database.get_project_managers()
+    errors = []
+    form = request.form
 
-    return render_template("new_project.html", user_name=session["user"])
+    if request.method == "POST":
+        data, errors = validate_new_project(form, managers)
+        if not errors:
+            database.create_project(data)
+            return redirect(url_for("projects"))
+
+    return render_template(
+        "new_project.html",
+        user_name=session["user"],
+        managers=managers,
+        statuses=database.PROJECT_STATUSES,
+        errors=errors,
+        form=form,
+    )
+
+
+PROJECT_TYPES = ("Kitchen Remodel", "Bathroom Remodel", "Roofing", "Home Addition", "Full Renovation", "Other")
+
+
+def validate_new_project(form, managers):
+    """Check the New Project form. Returns (clean data, list of error messages)."""
+    errors = []
+    data = {
+        "name": form.get("project_name", "").strip(),
+        "project_type": form.get("project_type", "").strip(),
+        "description": form.get("description", "").strip(),
+        "client_name": form.get("client_name", "").strip(),
+        "client_email": form.get("client_email", "").strip(),
+        "client_phone": form.get("client_phone", "").strip(),
+        "address": form.get("address", "").strip(),
+        "status": form.get("status", "Planning"),
+        "start_date": form.get("start_date", ""),
+        "due_date": form.get("end_date", ""),
+    }
+
+    if not data["name"]:
+        errors.append("Project name is required.")
+    if data["project_type"] not in PROJECT_TYPES:
+        errors.append("Choose a project type.")
+    if not data["client_name"]:
+        errors.append("Client name is required.")
+    if not data["address"]:
+        errors.append("Address is required.")
+    if data["status"] not in database.PROJECT_STATUSES:
+        errors.append("Choose a valid status.")
+
+    manager_ids = {str(manager["id"]) for manager in managers}
+    if form.get("manager", "") not in manager_ids:
+        errors.append("Choose a project manager.")
+    else:
+        data["manager_id"] = int(form["manager"])
+
+    budget_text = form.get("budget", "").strip()
+    try:
+        data["budget"] = round(float(budget_text), 2) if budget_text else 0.0
+        if data["budget"] < 0:
+            raise ValueError
+    except ValueError:
+        errors.append("Budget must be a number of 0 or more.")
+
+    for field, label in (("start_date", "Start date"), ("due_date", "End date")):
+        if data[field]:
+            try:
+                date.fromisoformat(data[field])
+            except ValueError:
+                errors.append(f"{label} is not a valid date.")
+    if data["start_date"] and data["due_date"] and data["due_date"] < data["start_date"]:
+        errors.append("End date can't be before the start date.")
+
+    return data, errors
 
 
 @app.route("/project/<int:project_id>")
