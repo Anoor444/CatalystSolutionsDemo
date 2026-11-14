@@ -43,6 +43,9 @@ PROJECTS = (
     ("Clear Lake Deck Restoration",     "William Anderson",      "Carlos Reyes",  "Completed",    16400, 15950, 100, "2026-10-23", "Other"),
 )
 
+# Sample projects are dated before the sample estimates, so they don't crowd "Recent Activity".
+SAMPLE_PROJECT_CREATED_AT = "2026-08-15 09:00:00"
+
 # The demo client account sees this client's projects in the client portal.
 DEMO_CLIENT_EMAIL = "demo.client@buffbison.com"
 DEMO_CLIENT_NAME_IN_DATA = "Sarah Johnson"
@@ -85,11 +88,11 @@ def load_sample_data(connection):
         cursor = connection.execute(
             """
             INSERT INTO projects (project_number, name, project_type, client_id, project_manager_id,
-                                  status, budget_amount, progress_percent, due_date)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                                  status, budget_amount, progress_percent, due_date, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (f"BB-{number:04d}", name, kind, client_ids[client], manager_ids[manager],
-             status, budget, progress, due),
+             status, budget, progress, due, SAMPLE_PROJECT_CREATED_AT),
         )
         project_id = cursor.lastrowid
 
