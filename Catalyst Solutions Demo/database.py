@@ -61,9 +61,15 @@ def init_app(app, database_file):
 
     with connect() as connection:
         create_tables(connection)
-        if connection.execute("SELECT COUNT(*) FROM projects").fetchone()[0] == 0:
-            from seed_data import load_sample_data
-            load_sample_data(connection)
+        from seed_data import load_billing_samples, load_sample_data
+
+        def count(table):
+            return connection.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]
+
+        if count("projects") == 0:
+            load_sample_data(connection)          # brand-new database: everything
+        elif count("estimates") == 0 and count("invoices") == 0:
+            load_billing_samples(connection)      # database from step 1: add sample estimates/invoices
 
 
 def create_tables(connection):
@@ -181,3 +187,266 @@ def create_project(data):
             (f"BB-{project_id:04d}", project_id),
         )
     return project_id
+
+
+# ---------------------------------------------------------------------
+# Shared helpers for estimates and invoices
+# ---------------------------------------------------------------------
+class RuleError(Exception):
+    """Raised when a request breaks a business rule (wrong status, missing record...).
+    The API turns it into a 400/404/409 JSON error with this message."""
+
+    def __init__(self, message, status_code=400):
+        super().__init__(message)
+        self.message = message
+        self.status_code = status_code
+
+
+def _money(value):
+    return round(float(value or 0), 2)
+
+
+def get_lookups():
+    """Dropdown data for the Estimates and Invoices pages."""
+    db = get_db()
+    return {
+        "clients": [dict(r) for r in db.execute("SELECT client_id, name FROM clients ORDER BY name")],
+        "categories": [dict(r) for r in db.execute(
+            "SELECT category_id, name FROM cost_categories WHERE is_active = 1 ORDER BY category_id")],
+        "managers": [dict(r) for r in db.execute(
+            "SELECT id AS user_id, name FROM users WHERE role = 'employee' ORDER BY name")],
+        "projects": [dict(r) for r in db.execute(
+            """SELECT p.project_id, p.name, c.name AS client_name
+               FROM projects p JOIN clients c ON c.client_id = p.client_id ORDER BY p.name""")],
+    }
+
+
+# ---------------------------------------------------------------------
+# Estimates (RTM A3, A4)
+# ---------------------------------------------------------------------
+ESTIMATE_EDITABLE = ("Draft", "Sent")
+# status a user can move an estimate to, from its current status
+ESTIMATE_TRANSITIONS = {
+    "Sent": ("Approved", "Rejected"),
+    "Rejected": ("Draft",),
+}
+
+
+def get_estimates(estimate_id=None):
+    db = get_db()
+    where, params = ("WHERE e.estimate_id = ?", (estimate_id,)) if estimate_id else ("", ())
+    rows = db.execute(
+        f"""SELECT e.*, date(e.created_at) AS created_date, c.name AS client_name,
+                   u.name AS created_by_name, p.project_id, p.project_number
+            FROM estimates e
+            JOIN clients c        ON c.client_id = e.client_id
+            LEFT JOIN users u     ON u.id = e.created_by
+            LEFT JOIN projects p  ON p.estimate_id = e.estimate_id
+            {where}
+            ORDER BY e.estimate_id DESC""",
+        params,
+    ).fetchall()
+    items = {}
+    for li in db.execute("SELECT * FROM estimate_line_items ORDER BY line_item_id"):
+        items.setdefault(li["estimate_id"], []).append(dict(li))
+    result = []
+    for row in rows:
+        estimate = dict(row)
+        estimate["created_at"] = estimate.pop("created_date")
+        estimate["line_items"] = items.get(row["estimate_id"], [])
+        result.append(estimate)
+    return result
+
+
+def get_estimate(estimate_id):
+    found = get_estimates(estimate_id)
+    if not found:
+        raise RuleError("Estimate not found.", 404)
+    return found[0]
+
+
+def _save_estimate_lines(db, estimate_id, line_items):
+    db.execute("DELETE FROM estimate_line_items WHERE estimate_id = ?", (estimate_id,))
+    total = 0
+    for li in line_items:
+        line_total = _money(li["quantity"] * li["unit_cost"])
+        total += line_total
+        db.execute(
+            """INSERT INTO estimate_line_items (estimate_id, category_id, description, quantity, unit_cost, line_total)
+               VALUES (?, ?, ?, ?, ?, ?)""",
+            (estimate_id, li["category_id"], li["description"], li["quantity"], li["unit_cost"], line_total),
+        )
+    db.execute("UPDATE estimates SET total_amount = ? WHERE estimate_id = ?", (_money(total), estimate_id))
+
+
+def create_estimate(data, user_id):
+    db = get_db()
+    with db:
+        cursor = db.execute(
+            "INSERT INTO estimates (estimate_number, title, client_id, created_by, status, created_at) "
+            "VALUES ('pending', ?, ?, ?, ?, datetime('now', 'localtime'))",
+            (data["title"], data["client_id"], user_id, data["status"]),
+        )
+        estimate_id = cursor.lastrowid
+        db.execute("UPDATE estimates SET estimate_number = ? WHERE estimate_id = ?", (f"EST-{estimate_id}", estimate_id))
+        _save_estimate_lines(db, estimate_id, data["line_items"])
+    return get_estimate(estimate_id)
+
+
+def update_estimate(estimate_id, data):
+    current = get_estimate(estimate_id)
+    if current["status"] not in ESTIMATE_EDITABLE:
+        raise RuleError(f"A {current['status'].lower()} estimate can't be edited.", 409)
+    if current["status"] == "Sent" and data["status"] == "Draft":
+        raise RuleError("A sent estimate can't go back to draft.", 409)
+    db = get_db()
+    with db:
+        db.execute(
+            "UPDATE estimates SET title = ?, client_id = ?, status = ? WHERE estimate_id = ?",
+            (data["title"], data["client_id"], data["status"], estimate_id),
+        )
+        _save_estimate_lines(db, estimate_id, data["line_items"])
+    return get_estimate(estimate_id)
+
+
+def set_estimate_status(estimate_id, new_status):
+    current = get_estimate(estimate_id)
+    allowed = ESTIMATE_TRANSITIONS.get(current["status"], ())
+    if new_status not in allowed:
+        raise RuleError(f"Can't change a {current['status'].lower()} estimate to {new_status.lower()}.", 409)
+    db = get_db()
+    with db:
+        db.execute("UPDATE estimates SET status = ? WHERE estimate_id = ?", (new_status, estimate_id))
+    return get_estimate(estimate_id)
+
+
+def delete_estimate(estimate_id):
+    current = get_estimate(estimate_id)
+    if current["status"] != "Draft":
+        raise RuleError("Only draft estimates can be deleted.", 409)
+    db = get_db()
+    with db:
+        db.execute("DELETE FROM estimates WHERE estimate_id = ?", (estimate_id,))
+
+
+def convert_estimate(estimate_id, data):
+    """Create a project from an approved estimate (RTM A4)."""
+    current = get_estimate(estimate_id)
+    if current["status"] != "Approved":
+        raise RuleError("Only approved estimates can be converted.", 409)
+    db = get_db()
+    with db:
+        cursor = db.execute(
+            """INSERT INTO projects (project_number, name, description, client_id, estimate_id,
+                                     project_manager_id, status, budget_amount, start_date, due_date)
+               VALUES ('pending', ?, ?, ?, ?, ?, 'Planning', ?, ?, ?)""",
+            (data["name"], f"Created from {current['estimate_number']}", current["client_id"], estimate_id,
+             data["project_manager_id"], data["budget_amount"], data["start_date"], data["due_date"]),
+        )
+        project_id = cursor.lastrowid
+        project_number = f"BB-{project_id:04d}"
+        db.execute("UPDATE projects SET project_number = ? WHERE project_id = ?", (project_number, project_id))
+        db.execute("UPDATE estimates SET status = 'Converted' WHERE estimate_id = ?", (estimate_id,))
+    return {"project_id": project_id, "project_number": project_number, "estimate": get_estimate(estimate_id)}
+
+
+# ---------------------------------------------------------------------
+# Invoices (RTM A5)
+# ---------------------------------------------------------------------
+INVOICE_EDITABLE = ("Draft", "Unpaid")
+INVOICE_TRANSITIONS = {
+    "Unpaid": ("Paid",),
+    "Paid": ("Unpaid",),   # undo a mistaken "Mark Paid"
+}
+
+
+def get_invoices(invoice_id=None):
+    db = get_db()
+    where, params = ("WHERE i.invoice_id = ?", (invoice_id,)) if invoice_id else ("", ())
+    rows = db.execute(
+        f"""SELECT i.*, p.name AS project_name, c.name AS client_name
+            FROM invoices i
+            JOIN projects p ON p.project_id = i.project_id
+            JOIN clients c  ON c.client_id = p.client_id
+            {where}
+            ORDER BY i.invoice_id DESC""",
+        params,
+    ).fetchall()
+    items = {}
+    for li in db.execute("SELECT * FROM invoice_line_items ORDER BY invoice_line_item_id"):
+        items.setdefault(li["invoice_id"], []).append(dict(li))
+    return [dict(row, line_items=items.get(row["invoice_id"], [])) for row in rows]
+
+
+def get_invoice(invoice_id):
+    found = get_invoices(invoice_id)
+    if not found:
+        raise RuleError("Invoice not found.", 404)
+    return found[0]
+
+
+def _save_invoice_lines(db, invoice_id, line_items):
+    db.execute("DELETE FROM invoice_line_items WHERE invoice_id = ?", (invoice_id,))
+    total = 0
+    for li in line_items:
+        line_total = _money(li["quantity"] * li["unit_price"])
+        total += line_total
+        db.execute(
+            """INSERT INTO invoice_line_items (invoice_id, description, quantity, unit_price, line_total)
+               VALUES (?, ?, ?, ?, ?)""",
+            (invoice_id, li["description"], li["quantity"], li["unit_price"], line_total),
+        )
+    db.execute("UPDATE invoices SET total_amount = ? WHERE invoice_id = ?", (_money(total), invoice_id))
+
+
+def create_invoice(data):
+    db = get_db()
+    with db:
+        cursor = db.execute(
+            """INSERT INTO invoices (invoice_number, project_id, issue_date, due_date, status)
+               VALUES ('pending', ?, ?, ?, ?)""",
+            (data["project_id"], data["issue_date"], data["due_date"], data["status"]),
+        )
+        invoice_id = cursor.lastrowid
+        db.execute("UPDATE invoices SET invoice_number = ? WHERE invoice_id = ?", (f"INV-{invoice_id}", invoice_id))
+        _save_invoice_lines(db, invoice_id, data["line_items"])
+    return get_invoice(invoice_id)
+
+
+def update_invoice(invoice_id, data):
+    current = get_invoice(invoice_id)
+    if current["status"] not in INVOICE_EDITABLE:
+        raise RuleError("A paid invoice can't be edited. Mark it unpaid first.", 409)
+    if current["status"] == "Unpaid" and data["status"] == "Draft":
+        raise RuleError("A sent invoice can't go back to draft.", 409)
+    db = get_db()
+    with db:
+        db.execute(
+            "UPDATE invoices SET project_id = ?, issue_date = ?, due_date = ?, status = ? WHERE invoice_id = ?",
+            (data["project_id"], data["issue_date"], data["due_date"], data["status"], invoice_id),
+        )
+        _save_invoice_lines(db, invoice_id, data["line_items"])
+    return get_invoice(invoice_id)
+
+
+def set_invoice_status(invoice_id, new_status):
+    current = get_invoice(invoice_id)
+    if new_status not in INVOICE_TRANSITIONS.get(current["status"], ()):
+        raise RuleError(f"Can't change a {current['status'].lower()} invoice to {new_status.lower()}.", 409)
+    db = get_db()
+    with db:
+        db.execute(
+            "UPDATE invoices SET status = ?, paid_at = CASE WHEN ? = 'Paid' THEN date('now', 'localtime') END "
+            "WHERE invoice_id = ?",
+            (new_status, new_status, invoice_id),
+        )
+    return get_invoice(invoice_id)
+
+
+def delete_invoice(invoice_id):
+    current = get_invoice(invoice_id)
+    if current["status"] != "Draft":
+        raise RuleError("Only draft invoices can be deleted.", 409)
+    db = get_db()
+    with db:
+        db.execute("DELETE FROM invoices WHERE invoice_id = ?", (invoice_id,))

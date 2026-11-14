@@ -12,7 +12,9 @@
 |---|---|
 | `schema.sql` | Every table, based on the team ERD. Safe to run again. |
 | `database.py` | Opens the connection for each request, sets up tables at startup, and holds the query functions pages use (`get_projects()`, `create_project()`, ...). |
-| `seed_data.py` | Sample data: the 12 projects, clients, project managers, cost categories and costs to date. |
+| `seed_data.py` | Sample data: the 12 projects, clients, project managers, cost categories, costs to date, 10 estimates and 9 invoices. |
+| `api.py` | JSON API used by the Estimates and Invoices pages (see below). |
+| `static/js/api-client.js` | `apiRequest()`, the helper the pages use to call the API (sends the CSRF token). |
 
 ## Commands
 
@@ -49,10 +51,28 @@ The client demo account is linked to the client **Sarah Johnson** (Riverstone Ki
 - [x] New Project form (saves to the database)
 - [ ] Dashboard cards
 - [ ] Project details page
-- [ ] Estimates, Invoices (front end ready; replace the `TODO(backend)` calls in the JS)
+- [x] Estimates: create, edit, send, approve or reject, delete drafts, convert to a project
+- [x] Invoices: create, edit, send, mark paid or unpaid, delete drafts, PDF
 - [ ] Job costs, receipts, schedule, clients, subcontractors
 - [ ] Client and subcontractor portals (still use the sample lists in `app.py`)
 - [ ] Documents and photos (still saved to JSON files in `instance/`)
+
+## JSON API (api.py)
+
+All endpoints need a logged-in **employee**. POST, PUT, PATCH and DELETE need the CSRF token in an `X-CSRF-Token` header; `apiRequest()` adds it for you. Errors come back as `{"error": "message"}`.
+
+| Method | URL | What it does |
+|---|---|---|
+| GET | `/api/lookups` | Clients, cost categories, project managers and projects for dropdowns |
+| GET / POST | `/api/estimates` | List estimates, or create one (`status`: Draft or Sent) |
+| PUT / DELETE | `/api/estimates/<id>` | Edit (Draft and Sent only) or delete (Draft only) |
+| PATCH | `/api/estimates/<id>/status` | Sent → Approved or Rejected; Rejected → Draft |
+| POST | `/api/estimates/<id>/convert` | Approved estimate → new project (RTM A4) |
+| GET / POST | `/api/invoices` | List invoices, or create one (`status`: Draft or Unpaid) |
+| PUT / DELETE | `/api/invoices/<id>` | Edit (Draft and Unpaid only) or delete (Draft only) |
+| PATCH | `/api/invoices/<id>/status` | Unpaid ↔ Paid (sets or clears `paid_at`) |
+
+The server recalculates every line total and grand total. Unit prices are rounded to cents.
 
 ## Moving to MySQL later
 

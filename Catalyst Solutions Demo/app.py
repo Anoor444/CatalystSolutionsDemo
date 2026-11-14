@@ -10,6 +10,7 @@ from uuid import uuid4
 from flask import (
     Flask,
     abort,
+    jsonify,
     redirect,
     render_template,
     request,
@@ -316,6 +317,10 @@ initialize_user_database()
 # Creates them from schema.sql and loads sample data the first time. See database.py.
 database.init_app(app, USER_DATABASE_FILE)
 
+# JSON endpoints used by the Estimates and Invoices pages (see api.py).
+from api import api  # noqa: E402  (imported here, after the database is set up)
+app.register_blueprint(api)
+
 
 # ---------- Template formatting helpers ----------
 # Usage in templates: {{ project.budget_amount|currency }}, {{ project.due_date|short_date }},
@@ -363,10 +368,14 @@ def role_required(*allowed_roles):
 
 @app.before_request
 def protect_post_requests():
-    if request.method == "POST":
-        submitted_token = request.form.get("csrf_token", "")
+    # Forms send the token as a hidden "csrf_token" field; the JavaScript on the
+    # Estimates/Invoices pages sends it in an "X-CSRF-Token" header instead.
+    if request.method in ("POST", "PUT", "PATCH", "DELETE"):
+        submitted_token = request.form.get("csrf_token") or request.headers.get("X-CSRF-Token", "")
         session_token = session.get("csrf_token", "")
         if not session_token or not secrets.compare_digest(submitted_token, session_token):
+            if request.path.startswith("/api/"):
+                return jsonify(error="Your session expired. Refresh the page and try again."), 400
             abort(400, description="Invalid or missing CSRF token.")
 
 
