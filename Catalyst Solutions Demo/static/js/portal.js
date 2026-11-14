@@ -5,7 +5,8 @@
   const role = window.portalContext.role, path = location.pathname;
   if (path === '/settings' || path === '/settings/change-password') return;
   // Preserve the original employee screens and their existing demo behavior.
-  if (role === 'employee' && ['/estimates', '/invoices', '/job-costs', '/schedule'].includes(path)) return;
+  // Projects and New Project use the database (server-rendered), so the browser demo layer leaves them alone.
+  if (role === 'employee' && ['/projects', '/new-project', '/estimates', '/invoices', '/job-costs', '/schedule'].includes(path)) return;
   const main = document.querySelector('main.content');
   if (!main) return;
   const banner = document.createElement('p'); banner.className = 'demo-banner';
@@ -88,7 +89,10 @@
   function actual(p){return D.actualCost(p);}
   function projectDetails() {
     const query=new URLSearchParams(location.search);
-    const id=Number(query.get('project') || path.split('/').pop()), p=D.visibleProjects().find(p=>p.id===id);
+    const id=Number(query.get('project') || path.split('/').pop());
+    // Projects that only exist in the database (e.g. converted from an estimate) come from the server.
+    const fromServer=role==='employee'&&window.serverProject&&window.serverProject.id===id?window.serverProject:null;
+    const p=D.visibleProjects().find(p=>p.id===id) || fromServer;
     if(!p){main.innerHTML='<section class="card"><h2>Project unavailable</h2><a href="/projects">Back to projects</a></section>';return;}
     document.querySelector('h1').textContent=p.name;document.title=p.name+' | Buff Bison';
     const heading=document.querySelector('.header .welcome');if(heading)heading.textContent=p.client+' · '+p.status;

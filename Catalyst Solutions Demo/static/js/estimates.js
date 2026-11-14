@@ -3,122 +3,55 @@
    Covers RTM A3 (estimates with line items + auto-calculation)
    and A4 (convert approved estimate -> project).
 
-   Field names follow the ERD (Estimate, EstimateLineItem, CostCategory,
-   Client, User, Project) so the mock data can be swapped for API calls.
-   Every place that should talk to the Flask backend is inside `api`
-   below and marked with TODO(backend).
+   Data comes from the Flask JSON API in api.py (via apiRequest in
+   api-client.js). The server re-checks everything and recalculates totals.
    ===================================================================== */
 
-// ---------------------------------------------------------------------
-// Mock data (replace with API responses)
-// ---------------------------------------------------------------------
-const CURRENT_USER = { user_id: 1, first_name: "Daniel", last_name: "Carter", role: "admin" };
-
-const users = [
-  { user_id: 1, first_name: "Daniel", last_name: "Carter", role: "admin" },
-  { user_id: 2, first_name: "Carlos", last_name: "Reyes",  role: "project_manager" },
-  { user_id: 3, first_name: "James",  last_name: "Wilson", role: "project_manager" },
-];
-
-const clients = [
-  { client_id: 1, contact_first_name: "Maria",   contact_last_name: "Hernandez" },
-  { client_id: 2, contact_first_name: "James",   contact_last_name: "Thompson" },
-  { client_id: 3, contact_first_name: "Angela",  contact_last_name: "Brooks" },
-  { client_id: 4, contact_first_name: "Robert",  contact_last_name: "Nguyen" },
-  { client_id: 5, contact_first_name: "Sarah",   contact_last_name: "Johnson" },
-  { client_id: 6, contact_first_name: "Emily",   contact_last_name: "Davis" },
-  { client_id: 7, contact_first_name: "Michael", contact_last_name: "Thompson" },
-];
-
-const costCategories = [
-  { category_id: 1, name: "Labor" },
-  { category_id: 2, name: "Materials" },
-  { category_id: 3, name: "Equipment" },
-  { category_id: 4, name: "Subcontractor" },
-  { category_id: 5, name: "Permits & Fees" },
-  { category_id: 6, name: "Disposal" },
-];
-
-let nextLineIdSeed = 1;
-
-// status: Draft | Sent | Approved | Rejected | Converted
-let estimates = [
-  est(1001, "Kitchen Remodel – Oak Forest",      1, 1, "Converted", "2026-08-18", [[2,"Cabinets and countertops",1,28500],[1,"Demo and install labor",120,85],[4,"Plumbing and electrical",1,18500],[5,"City permit",1,1300]]),
-  est(1002, "Roof Replacement – Katy",           2, 2, "Converted", "2026-08-25", [[2,"Architectural shingles (squares)",32,310],[1,"Tear-off and install labor",1,10500],[6,"Dumpster and haul-off",1,1780]]),
-  est(1003, "Storm Damage Repair – Cypress",     4, 2, "Approved",  "2026-09-22", [[1,"Framing and drywall repair",96,80],[2,"Lumber, drywall, and paint",1,9400],[4,"Window replacement",1,14200],[6,"Debris removal",1,1470]]),
-  est(1004, "Master Bath Addition – Sugar Land", 3, 1, "Sent",      "2026-09-29", [[4,"Plumbing rough-in and finish",1,12500],[2,"Tile, vanity, and fixtures",1,16800],[1,"General labor",110,85],[5,"Permit and inspection",1,2350]]),
-  est(1005, "Patio Cover – Pearland",            5, 1, "Sent",      "2026-10-01", [[2,"Cedar posts and beams",1,6200],[1,"Framing labor",60,80],[3,"Post-hole auger rental",2,175]]),
-  est(1006, "Garage Conversion – Spring",        6, 3, "Sent",      "2026-10-03", [[1,"Framing and insulation",140,82],[4,"HVAC mini-split install",1,5800],[2,"Drywall, flooring, trim",1,8900],[5,"Permit",1,950]]),
-  est(1007, "Fence Replacement – Humble",        7, 2, "Sent",      "2026-10-06", [[2,"Pressure-treated pickets and rails",210,14.5],[1,"Install labor",48,70],[6,"Old fence haul-off",1,650]]),
-  est(1008, "Laundry Room Refresh – Bellaire",   5, 1, "Draft",     "2026-10-09", [[2,"Cabinets and shelving",1,3400],[1,"Install labor",24,80]]),
-  est(1009, "Deck Repair – The Woodlands",       2, 3, "Draft",     "2026-10-11", [[2,"Composite decking boards",45,62],[1,"Demo and install",36,80]]),
-  est(1010, "Driveway Extension – Tomball",      4, 2, "Rejected",  "2026-09-12", [[4,"Concrete pour and finish",1,9800],[3,"Skid steer rental",2,420]]),
-];
-
-let nextEstimateId = 1011;
-let nextLineId = 500;
-
-function est(id, title, clientId, createdBy, status, date, lines) {
-  const line_items = lines.map(([category_id, description, quantity, unit_cost]) => ({
-    line_item_id: nextLineIdSeed++, category_id, description, quantity, unit_cost,
-    line_total: round2(quantity * unit_cost),
-  }));
-  return {
-    estimate_id: id,
-    estimate_number: `EST-${id}`,
-    title,
-    client_id: clientId,
-    created_by: createdBy,
-    created_at: date,
-    status,
-    line_items,
-    total_amount: round2(line_items.reduce((s, li) => s + li.line_total, 0)),
-  };
-}
+// Filled from the server when the page loads (see loadData)
+let clients = [];
+let costCategories = [];
+let managers = [];
+let estimates = [];
 
 // ---------------------------------------------------------------------
-// API layer – swap each body for a fetch() call to Flask
+// API calls (endpoints are in api.py)
 // ---------------------------------------------------------------------
 const api = {
-  // TODO(backend): GET /api/estimates
-  async list() { return estimates; },
-
-  // TODO(backend): POST /api/estimates   body: { client_id, title, status, line_items:[...] }
-  async create(payload) {
-    const id = nextEstimateId++;
-    const record = {
-      estimate_id: id,
-      estimate_number: `EST-${id}`,
-      created_by: CURRENT_USER.user_id,
-      created_at: todayISO(),
-      ...payload,
-    };
-    estimates.unshift(record);
-    return record;
-  },
-
-  // TODO(backend): PUT /api/estimates/<id>
-  async update(id, payload) {
-    const i = estimates.findIndex(e => e.estimate_id === id);
-    estimates[i] = { ...estimates[i], ...payload };
-    return estimates[i];
-  },
-
-  // TODO(backend): PATCH /api/estimates/<id>/status   body: { status }
-  async setStatus(id, status) { return api.update(id, { status }); },
-
-  // TODO(backend): DELETE /api/estimates/<id>   (drafts only)
-  async remove(id) { estimates = estimates.filter(e => e.estimate_id !== id); },
-
-  // TODO(backend): POST /api/estimates/<id>/convert
-  //   body: { name, project_manager_id, budget_amount, start_date, due_date }
-  //   server creates Project (client_id + estimate_id carried over) and sets estimate status = Converted
-  async convert(id, projectData) {
-    const project_id = 2000 + id - 1000;
-    await api.update(id, { status: "Converted", project_id });
-    return { project_id, project_number: `PRJ-${project_id}`, ...projectData };
-  },
+  lookups:   ()                 => apiRequest("GET", "/api/lookups"),
+  list:      ()                 => apiRequest("GET", "/api/estimates"),
+  create:    (payload)          => apiRequest("POST", "/api/estimates", payload),
+  update:    (id, payload)      => apiRequest("PUT", `/api/estimates/${id}`, payload),
+  setStatus: (id, status)       => apiRequest("PATCH", `/api/estimates/${id}/status`, { status }),
+  remove:    (id)               => apiRequest("DELETE", `/api/estimates/${id}`),
+  convert:   (id, projectData)  => apiRequest("POST", `/api/estimates/${id}/convert`, projectData),
 };
+
+async function loadData() {
+  const [lookups, list] = await Promise.all([api.lookups(), api.list()]);
+  clients = lookups.clients;
+  costCategories = lookups.categories;
+  managers = lookups.managers;
+  estimates = list;
+}
+
+async function reloadEstimates() {
+  estimates = await api.list();
+  refresh();
+}
+
+// Runs an API action; shows the server's message if it fails.
+// Returns true on success so callers can close the modal.
+async function attempt(action, errorBox) {
+  try {
+    await action();
+    return true;
+  } catch (err) {
+    if (errorBox) { errorBox.textContent = err.message; errorBox.hidden = false; }
+    else toast(err.message);
+    if (err.status === 401) setTimeout(() => (window.location.href = "/login"), 1500);
+    return false;
+  }
+}
 
 // ---------------------------------------------------------------------
 // Helpers
@@ -127,7 +60,10 @@ const $ = (sel) => document.querySelector(sel);
 const money = (n) => Number(n || 0).toLocaleString("en-US", { style: "currency", currency: "USD" });
 const moneyShort = (n) => Number(n || 0).toLocaleString("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 });
 function round2(n) { return Math.round((Number(n) + Number.EPSILON) * 100) / 100; }
-function todayISO() { return new Date().toISOString().slice(0, 10); }
+function todayISO() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
 function escapeHtml(s) {
   return String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 }
@@ -136,8 +72,7 @@ function formatDate(iso) {
   const [y, m, d] = iso.split("-").map(Number);
   return new Date(y, m - 1, d).toLocaleDateString("en-US", { month: "short", day: "2-digit", year: "numeric" });
 }
-const clientName = (id) => { const c = clients.find(c => c.client_id === id); return c ? `${c.contact_first_name} ${c.contact_last_name}` : "—"; };
-const userName = (id) => { const u = users.find(u => u.user_id === id); return u ? `${u.first_name} ${u.last_name}` : "—"; };
+const clientName = (id) => { const c = clients.find(c => c.client_id === id); return c ? c.name : "—"; };
 const findEstimate = (id) => estimates.find(e => e.estimate_id === id);
 
 function toast(msg) {
@@ -179,7 +114,7 @@ function renderTable() {
       <td>${escapeHtml(e.title)}</td>
       <td>${escapeHtml(e.estimate_number)}</td>
       <td>${escapeHtml(clientName(e.client_id))}</td>
-      <td>${escapeHtml(userName(e.created_by))}</td>
+      <td>${escapeHtml(e.created_by_name || "—")}</td>
       <td>${formatDate(e.created_at)}</td>
       <td>${statusBadge(e.status)}</td>
       <td class="num">${money(e.total_amount)}</td>
@@ -226,10 +161,10 @@ function openEstimate(id = null) {
 
   $("#estimateModalTitle").textContent = e ? `${e.estimate_number}` : "New Estimate";
   $("#estimateModalSub").innerHTML = e
-    ? `${statusBadge(e.status)} &nbsp;Created ${formatDate(e.created_at)} by ${escapeHtml(userName(e.created_by))}`
+    ? `${statusBadge(e.status)} &nbsp;Created ${formatDate(e.created_at)} by ${escapeHtml(e.created_by_name || "—")}`
     : "Add a client, job title, and at least one line item.";
 
-  fillSelect($("#estClient"), clients, "client_id", c => `${c.contact_first_name} ${c.contact_last_name}`, "Select a client…");
+  fillSelect($("#estClient"), clients, "client_id", c => c.name, "Select a client…");
   $("#estClient").value = e ? e.client_id : "";
   $("#estTitle").value = e ? e.title : "";
 
@@ -275,7 +210,7 @@ function renderFooter(e) {
       <button type="button" class="btn-outline" data-close>Close</button>
       <button type="button" class="btn-outline" data-status="Draft">Reopen as Draft</button>`,
     Converted: `
-      <span class="modal-sub" style="margin-right:auto">Converted to project ${e && e.project_id ? "PRJ-" + e.project_id : ""}</span>
+      <span class="modal-sub" style="margin-right:auto">Converted to project ${e && e.project_number ? escapeHtml(e.project_number) : ""}</span>
       <button type="button" class="btn-outline" data-close>Close</button>`,
   };
   f.innerHTML = buttons[status];
@@ -303,7 +238,7 @@ function recalc() {
   let total = 0, count = 0;
   document.querySelectorAll("#lineItemsBody tr").forEach(tr => {
     const qty = parseFloat(tr.querySelector(".li-qty").value) || 0;
-    const cost = parseFloat(tr.querySelector(".li-cost").value) || 0;
+    const cost = round2(parseFloat(tr.querySelector(".li-cost").value) || 0);  // cents, same as the server
     const lineTotal = round2(qty * cost);
     tr.querySelector(".line-total").textContent = money(lineTotal);
     total += lineTotal;
@@ -334,7 +269,6 @@ function collectForm() {
     if (!(c >= 0) || cost.value === "") { cost.classList.add("invalid"); bad = true; }
     if (bad) return;
     line_items.push({
-      line_item_id: nextLineId++,
       category_id: Number(cat.value),
       description: desc.value.trim(),
       quantity: q,
@@ -361,31 +295,43 @@ function collectForm() {
 async function saveEstimate(status) {
   const data = collectForm();
   if (!data) return;
-  if (editingId) {
-    const e = await api.update(editingId, { ...data, status });
-    toast(`${e.estimate_number} saved${status === "Sent" ? " and sent" : ""}`);
-  } else {
-    const e = await api.create({ ...data, status });
-    toast(`${e.estimate_number} created${status === "Sent" ? " and sent" : " as draft"}`);
-  }
+  // The server works out line totals and the estimate total itself.
+  const payload = {
+    client_id: data.client_id,
+    title: data.title,
+    status,
+    line_items: data.line_items.map(({ category_id, description, quantity, unit_cost }) =>
+      ({ category_id, description, quantity, unit_cost })),
+  };
+  let saved;
+  const ok = await attempt(async () => {
+    saved = editingId ? await api.update(editingId, payload) : await api.create(payload);
+  }, $("#formError"));
+  if (!ok) return;
+  toast(editingId
+    ? `${saved.estimate_number} saved${status === "Sent" ? " and sent" : ""}`
+    : `${saved.estimate_number} created${status === "Sent" ? " and sent" : " as draft"}`);
   closeModal($("#estimateModal"));
-  refresh();
+  await reloadEstimates();
 }
 
 async function changeStatus(status) {
-  const e = await api.setStatus(editingId, status);
-  toast(`${e.estimate_number} marked ${status}`);
+  let saved;
+  const ok = await attempt(async () => { saved = await api.setStatus(editingId, status); }, $("#formError"));
+  if (!ok) return;
+  toast(`${saved.estimate_number} marked ${status}`);
   closeModal($("#estimateModal"));
-  refresh();
+  await reloadEstimates();
 }
 
 async function deleteDraft() {
   const e = findEstimate(editingId);
   if (!confirm(`Delete ${e.estimate_number}? This cannot be undone.`)) return;
-  await api.remove(editingId);
+  const ok = await attempt(() => api.remove(editingId), $("#formError"));
+  if (!ok) return;
   toast(`${e.estimate_number} deleted`);
   closeModal($("#estimateModal"));
-  refresh();
+  await reloadEstimates();
 }
 
 // ---------------------------------------------------------------------
@@ -400,9 +346,9 @@ function openConvert(id) {
   $("#convertSummary").innerHTML = `
     <strong>Client:</strong> ${escapeHtml(clientName(e.client_id))}<br>
     <strong>Approved total:</strong> ${money(e.total_amount)}<br>
-    <strong>Line items:</strong> ${e.line_items.length} (carried over as the project's estimated costs)`;
+    <strong>Line items:</strong> ${e.line_items.length} (the estimate stays linked to the new project)`;
   $("#projName").value = e.title;
-  fillSelect($("#projManager"), users.filter(u => ["admin", "project_manager"].includes(u.role)), "user_id", u => `${u.first_name} ${u.last_name}`, "Select a project manager…");
+  fillSelect($("#projManager"), managers, "user_id", u => u.name, "Select a project manager…");
   $("#projBudget").value = e.total_amount;
   $("#projStart").value = todayISO();
   $("#projDue").value = "";
@@ -431,23 +377,34 @@ async function submitConvert(ev) {
   err.textContent = errors.join(" ");
   if (errors.length) return;
 
-  const project = await api.convert(convertingId, {
-    name: name.value.trim(),
-    project_manager_id: Number(pm.value),
-    budget_amount: round2(parseFloat(budget.value)),
-    start_date: start.value || null,
-    due_date: due.value,
-  });
+  let result;
+  const ok = await attempt(async () => {
+    result = await api.convert(convertingId, {
+      name: name.value.trim(),
+      project_manager_id: Number(pm.value),
+      budget_amount: round2(parseFloat(budget.value)),
+      start_date: start.value || null,
+      due_date: due.value,
+    });
+  }, err);
+  if (!ok) return;
   closeModal($("#convertModal"));
-  refresh();
-  toast(`Project ${project.project_number} created from ${findEstimate(convertingId).estimate_number}`);
+  await reloadEstimates();
+  toast(`Project ${result.project_number} created from ${result.estimate.estimate_number}. It's now on the Projects page.`);
 }
 
 // ---------------------------------------------------------------------
 // Events
 // ---------------------------------------------------------------------
-document.addEventListener("DOMContentLoaded", () => {
-  refresh();
+document.addEventListener("DOMContentLoaded", async () => {
+  $("#estimatesBody").innerHTML = `<tr class="empty-row"><td colspan="8">Loading estimates…</td></tr>`;
+  try {
+    await loadData();
+    refresh();
+  } catch (err) {
+    $("#estimatesBody").innerHTML = `<tr class="empty-row"><td colspan="8">${escapeHtml(err.message)}</td></tr>`;
+    if (err.status === 401) setTimeout(() => (window.location.href = "/login"), 1500);
+  }
 
   $("#newEstimateBtn").addEventListener("click", () => openEstimate());
   $("#searchInput").addEventListener("input", renderTable);

@@ -2,99 +2,53 @@
    Buff Bison – Invoices page
    Covers RTM A5: create invoices, track paid/unpaid, export as PDF.
 
-   Field names follow the ERD (Invoice, InvoiceLineItem, Project, Client)
-   so the mock data can be swapped for API calls. Every place that should
-   talk to the Flask backend is inside `api` below, marked TODO(backend).
+   Data comes from the Flask JSON API in api.py (via apiRequest in
+   api-client.js). The server re-checks everything and recalculates totals.
 
    Status values stored: Draft | Unpaid | Paid
    "Overdue" is not stored – it's shown when an Unpaid invoice is past its due date.
    ===================================================================== */
 
-// ---------------------------------------------------------------------
-// Mock data (replace with API responses)
-// ---------------------------------------------------------------------
-const clients = [
-  { client_id: 1, contact_first_name: "Sarah",   contact_last_name: "Johnson" },
-  { client_id: 2, contact_first_name: "Michael", contact_last_name: "Thompson" },
-  { client_id: 3, contact_first_name: "Emily",   contact_last_name: "Davis" },
-  { client_id: 4, contact_first_name: "Robert",  contact_last_name: "Garcia" },
-];
-
-const projects = [
-  { project_id: 1, name: "Riverstone Kitchen Remodel",   client_id: 1 },
-  { project_id: 2, name: "Sugar Land Roof Replacement",  client_id: 2 },
-  { project_id: 3, name: "Memorial Bathroom Renovation", client_id: 3 },
-  { project_id: 4, name: "Katy Home Addition",           client_id: 4 },
-];
-
-let nextLineId = 1;
-
-let invoices = [
-  inv(1040, 1, "Paid",   "2026-08-20", "2026-09-19", "2026-09-10", [["Deposit – 30% of contract", 1, 15000]]),
-  inv(1041, 4, "Paid",   "2026-08-28", "2026-09-27", "2026-09-20", [["Foundation pour", 1, 14000], ["Site prep and grading", 1, 8000]]),
-  inv(1042, 2, "Paid",   "2026-09-15", "2026-10-15", "2026-10-27", [["Tear-off and disposal", 1, 3800], ["Shingle installation – first half", 1, 6000]]),
-  inv(1043, 4, "Paid",   "2026-09-30", "2026-10-30", "2026-10-20", [["Rough plumbing and electrical", 1, 14600]]),
-  inv(1044, 3, "Paid",   "2026-10-01", "2026-10-31", "2026-10-08", [["Deposit – design and planning", 1, 2500]]),
-  inv(1045, 1, "Unpaid", "2026-10-10", "2026-11-09", null,         [["Cabinet installation – progress billing", 1, 9500], ["Countertop templating", 1, 3000]]),
-  inv(1046, 4, "Unpaid", "2026-09-15", "2026-10-15", null,         [["Framing labor (hours)", 75, 90], ["Lumber delivery", 1, 1500]]),
-  inv(1047, 2, "Unpaid", "2026-10-20", "2026-11-19", null,         [["Final roof inspection and cleanup", 1, 4000]]),
-  inv(1048, 3, "Draft",  "2026-10-28", "2026-11-27", null,         [["Design consultation", 1, 1000], ["Demo – bathroom fixtures", 1, 1500]]),
-];
-
-let nextInvoiceId = 1049;
-
-function inv(id, projectId, status, issue, due, paidAt, lines) {
-  const line_items = lines.map(([description, quantity, unit_price]) => ({
-    invoice_line_item_id: nextLineId++, description, quantity, unit_price,
-    line_total: round2(quantity * unit_price),
-  }));
-  return {
-    invoice_id: id,
-    invoice_number: `INV-${id}`,
-    project_id: projectId,
-    issue_date: issue,
-    due_date: due,
-    paid_at: paidAt,
-    status,
-    line_items,
-    total_amount: round2(line_items.reduce((s, li) => s + li.line_total, 0)),
-  };
-}
+// Filled from the server when the page loads (see loadData)
+let projects = [];   // { project_id, name, client_name }
+let invoices = [];
 
 // ---------------------------------------------------------------------
-// API layer – swap each body for a fetch() call to Flask
+// API calls (endpoints are in api.py)
 // ---------------------------------------------------------------------
 const api = {
-  // TODO(backend): GET /api/invoices
-  async list() { return invoices; },
-
-  // TODO(backend): POST /api/invoices   body: { project_id, issue_date, due_date, status, line_items:[...] }
-  async create(payload) {
-    const id = nextInvoiceId++;
-    const record = { invoice_id: id, invoice_number: `INV-${id}`, paid_at: null, ...payload };
-    invoices.unshift(record);
-    return record;
-  },
-
-  // TODO(backend): PUT /api/invoices/<id>   (Draft and Unpaid only)
-  async update(id, payload) {
-    const i = invoices.findIndex(x => x.invoice_id === id);
-    invoices[i] = { ...invoices[i], ...payload };
-    return invoices[i];
-  },
-
-  // TODO(backend): PATCH /api/invoices/<id>/status   body: { status }
-  //   server sets paid_at when status becomes Paid, clears it otherwise
-  async setStatus(id, status) {
-    return api.update(id, { status, paid_at: status === "Paid" ? todayISO() : null });
-  },
-
-  // TODO(backend): DELETE /api/invoices/<id>   (Draft only)
-  async remove(id) { invoices = invoices.filter(x => x.invoice_id !== id); },
-
-  // TODO(backend): GET /api/invoices/<id>/pdf  could later return a server-made PDF.
-  //   For now the browser's "Save as PDF" print option creates it.
+  lookups:   ()            => apiRequest("GET", "/api/lookups"),
+  list:      ()            => apiRequest("GET", "/api/invoices"),
+  create:    (payload)     => apiRequest("POST", "/api/invoices", payload),
+  update:    (id, payload) => apiRequest("PUT", `/api/invoices/${id}`, payload),
+  setStatus: (id, status)  => apiRequest("PATCH", `/api/invoices/${id}/status`, { status }),
+  remove:    (id)          => apiRequest("DELETE", `/api/invoices/${id}`),
+  // PDF: the browser's "Save as PDF" print option creates it (see openPdf).
 };
+
+async function loadData() {
+  const [lookups, list] = await Promise.all([api.lookups(), api.list()]);
+  projects = lookups.projects;
+  invoices = list;
+}
+
+async function reloadInvoices() {
+  invoices = await api.list();
+  refresh();
+}
+
+// Runs an API action; shows the server's message if it fails.
+async function attempt(action, errorBox) {
+  try {
+    await action();
+    return true;
+  } catch (err) {
+    if (errorBox && !errorBox.parentElement.closest("[hidden]")) { errorBox.textContent = err.message; errorBox.hidden = false; }
+    else toast(err.message);
+    if (err.status === 401) setTimeout(() => (window.location.href = "/login"), 1500);
+    return false;
+  }
+}
 
 // ---------------------------------------------------------------------
 // Helpers
@@ -123,8 +77,7 @@ const findInvoice = (id) => invoices.find(x => x.invoice_id === id);
 const findProject = (id) => projects.find(p => p.project_id === id);
 function clientNameForProject(projectId) {
   const p = findProject(projectId);
-  const c = p && clients.find(c => c.client_id === p.client_id);
-  return c ? `${c.contact_first_name} ${c.contact_last_name}` : "—";
+  return p ? p.client_name : "—";
 }
 const projectName = (id) => (findProject(id) || {}).name || "—";
 
@@ -300,7 +253,7 @@ function recalc() {
   let total = 0, count = 0;
   document.querySelectorAll("#lineItemsBody tr").forEach(tr => {
     const qty = parseFloat(tr.querySelector(".li-qty").value) || 0;
-    const price = parseFloat(tr.querySelector(".li-price").value) || 0;
+    const price = round2(parseFloat(tr.querySelector(".li-price").value) || 0);  // cents, same as the server
     const lt = round2(qty * price);
     tr.querySelector(".line-total").textContent = money(lt);
     total += lt;
@@ -332,7 +285,6 @@ function collectForm() {
     if (!(p >= 0) || price.value === "") { price.classList.add("invalid"); bad = true; }
     if (bad) return;
     line_items.push({
-      invoice_line_item_id: nextLineId++,
       description: desc.value.trim(),
       quantity: q,
       unit_price: round2(p),
@@ -358,33 +310,44 @@ function collectForm() {
 async function saveInvoice(status) {
   const data = collectForm();
   if (!data) return;
+  // The server works out line totals and the invoice total itself.
+  const payload = {
+    project_id: data.project_id,
+    issue_date: data.issue_date,
+    due_date: data.due_date,
+    status,
+    line_items: data.line_items.map(({ description, quantity, unit_price }) => ({ description, quantity, unit_price })),
+  };
+  const wasDraft = editingId && findInvoice(editingId).status === "Draft";
   let x;
-  if (editingId) {
-    const wasDraft = findInvoice(editingId).status === "Draft";
-    x = await api.update(editingId, { ...data, status });
-    toast(`${x.invoice_number} ${wasDraft && status === "Unpaid" ? "sent" : "saved"}`);
-  } else {
-    x = await api.create({ ...data, status });
-    toast(`${x.invoice_number} ${status === "Draft" ? "saved as draft" : "created and sent"}`);
-  }
+  const ok = await attempt(async () => {
+    x = editingId ? await api.update(editingId, payload) : await api.create(payload);
+  }, $("#formError"));
+  if (!ok) return;
+  toast(editingId
+    ? `${x.invoice_number} ${wasDraft && status === "Unpaid" ? "sent" : "saved"}`
+    : `${x.invoice_number} ${status === "Draft" ? "saved as draft" : "created and sent"}`);
   closeModal($("#invoiceModal"));
-  refresh();
+  await reloadInvoices();
 }
 
 async function changeStatus(id, status) {
-  const x = await api.setStatus(id, status);
+  let x;
+  const ok = await attempt(async () => { x = await api.setStatus(id, status); }, $("#formError"));
+  if (!ok) return;
   toast(`${x.invoice_number} marked ${status.toLowerCase()}`);
   closeModal($("#invoiceModal"));
-  refresh();
+  await reloadInvoices();
 }
 
 async function deleteDraft() {
   const x = findInvoice(editingId);
   if (!confirm(`Delete ${x.invoice_number}? This cannot be undone.`)) return;
-  await api.remove(editingId);
+  const ok = await attempt(() => api.remove(editingId), $("#formError"));
+  if (!ok) return;
   toast(`${x.invoice_number} deleted`);
   closeModal($("#invoiceModal"));
-  refresh();
+  await reloadInvoices();
 }
 
 // ---------------------------------------------------------------------
@@ -445,8 +408,15 @@ function openPdf(id) {
 // ---------------------------------------------------------------------
 // Events
 // ---------------------------------------------------------------------
-document.addEventListener("DOMContentLoaded", () => {
-  refresh();
+document.addEventListener("DOMContentLoaded", async () => {
+  $("#invoicesBody").innerHTML = `<tr class="empty-row"><td colspan="8">Loading invoices…</td></tr>`;
+  try {
+    await loadData();
+    refresh();
+  } catch (err) {
+    $("#invoicesBody").innerHTML = `<tr class="empty-row"><td colspan="8">${escapeHtml(err.message)}</td></tr>`;
+    if (err.status === 401) setTimeout(() => (window.location.href = "/login"), 1500);
+  }
 
   $("#newInvoiceBtn").addEventListener("click", () => openInvoice());
   $("#searchInput").addEventListener("input", renderTable);
