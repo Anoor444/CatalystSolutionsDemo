@@ -472,7 +472,34 @@ def dashboard():
             pending_estimates=pending_estimates,
             open_invoices=open_invoices,
         )
-    return render_template("dashboard.html", user_name=session["user"])
+    dashboard_data = database.get_dashboard()
+    return render_template(
+        "dashboard.html",
+        user_name=session["user"],
+        stats=dashboard_data["stats"],
+        projects=dashboard_data["projects"],
+        activity=dashboard_data["activity"],
+        tasks=get_upcoming_tasks(),
+    )
+
+
+def get_upcoming_tasks(limit=6):
+    """Open tasks for the Dashboard, soonest first (overdue ones on top).
+    Uses the same sample task list as the Schedule page until tasks move to the database."""
+    schedule_data = get_schedule_data()
+    names = {project["project_id"]: project["name"] for project in database.get_projects()}
+    today = date.today().isoformat()
+    open_tasks = sorted(
+        (task for task in schedule_data["tasks"] if task["status"] != "Completed"),
+        key=lambda task: task["due_date"],
+    )
+    return {
+        "count": len(open_tasks),
+        "items": [
+            {**task, "project_name": names.get(task["project_id"], ""), "overdue": task["due_date"] < today}
+            for task in open_tasks[:limit]
+        ],
+    }
 
 
 # ---------- PROJECTS ----------

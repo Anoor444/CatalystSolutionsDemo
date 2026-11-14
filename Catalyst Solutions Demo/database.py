@@ -71,6 +71,16 @@ def init_app(app, database_file):
         elif count("estimates") == 0 and count("invoices") == 0:
             load_billing_samples(connection)      # database from step 1: add sample estimates/invoices
 
+        # Databases created before step 3 stamped the sample projects with their creation time,
+        # which would fill "Recent Activity" with 12 "project created" entries. Backdate them once.
+        from seed_data import PROJECTS, SAMPLE_PROJECT_CREATED_AT
+        names = [p[0] for p in PROJECTS]
+        connection.execute(
+            f"UPDATE projects SET created_at = ? WHERE description IS NULL "
+            f"AND created_at > ? AND name IN ({','.join('?' * len(names))})",
+            (SAMPLE_PROJECT_CREATED_AT, SAMPLE_PROJECT_CREATED_AT, *names),
+        )
+
 
 def create_tables(connection):
     with open(SCHEMA_FILE, encoding="utf-8") as schema:
@@ -450,3 +460,45 @@ def delete_invoice(invoice_id):
     db = get_db()
     with db:
         db.execute("DELETE FROM invoices WHERE invoice_id = ?", (invoice_id,))
+
+
+# ---------------------------------------------------------------------
+# Dashboard (employee)
+# ---------------------------------------------------------------------
+def get_dashboard():
+    db = get_db()
+    one = lambda sql: db.execute(sql).fetchone()[0]
+    stats = {
+        "active_projects": one("SELECT COUNT(*) FROM projects WHERE status = 'In Progress'"),
+        "pending_estimates": one("SELECT COUNT(*) FROM estimates WHERE status = 'Sent'"),
+        "unpaid_total": one("SELECT COALESCE(SUM(total_amount), 0) FROM invoices WHERE status = 'Unpaid'"),
+        "unpaid_count": one("SELECT COUNT(*) FROM invoices WHERE status = 'Unpaid'"),
+        "overdue_count": one(
+            "SELECT COUNT(*) FROM invoices WHERE status = 'Unpaid' AND due_date < date('now', 'localtime')"),
+    }
+    open_projects = db.execute(
+        _PROJECT_SELECT + " WHERE p.status != 'Completed' "
+        "ORDER BY CASE p.status WHEN 'In Progress' THEN 0 WHEN 'Planning' THEN 1 ELSE 2 END, "
+        "p.due_date IS NULL, p.due_date"
+    ).fetchall()
+
+    # Recent activity is built from the timestamps already stored on each record.
+    events = db.execute(
+        """
+        SELECT created_at AS at, 'Estimate ' || estimate_number || ' created: ' || title AS text
+          FROM estimates
+        UNION ALL
+        SELECT issue_date, 'Invoice ' || i.invoice_number || ' sent: ' || p.name
+          FROM invoices i JOIN projects p ON p.project_id = i.project_id WHERE i.status != 'Draft'
+        UNION ALL
+        SELECT paid_at, 'Invoice ' || invoice_number || ' paid ($' || printf('%,.2f', total_amount) || ')'
+          FROM invoices WHERE paid_at IS NOT NULL
+        UNION ALL
+        SELECT created_at, 'Project ' || name || ' created'
+               || CASE WHEN estimate_id IS NOT NULL THEN ' from an estimate' ELSE '' END
+          FROM projects
+        ORDER BY at DESC
+        LIMIT 6
+        """
+    ).fetchall()
+    return {"stats": stats, "projects": open_projects, "activity": events}

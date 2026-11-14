@@ -49,7 +49,7 @@ The client demo account is linked to the client **Sarah Johnson** (Riverstone Ki
 - [x] Login (users table)
 - [x] Projects page and its cards (employee view)
 - [x] New Project form (saves to the database)
-- [ ] Dashboard cards
+- [x] Dashboard (employee): cards, open projects and recent activity from the database; upcoming tasks use the Schedule page's sample tasks until tasks move to the database
 - [ ] Project details page
 - [x] Estimates: create, edit, send, approve or reject, delete drafts, convert to a project
 - [x] Invoices: create, edit, send, mark paid or unpaid, delete drafts, PDF

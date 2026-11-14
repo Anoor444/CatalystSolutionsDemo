@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Dashboard | Buff Bison Construction</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <style>.overdue-date { color: #8a2b2b; font-weight: bold; }</style>
 </head>
 <body>
 <div class="app">
@@ -37,19 +38,19 @@
             <section class="cards">
                 <div class="card summary">
                     <p class="summary-label">Active Projects</p>
-                    <p class="summary-value">8</p>
+                    <p class="summary-value">{{ stats.active_projects }}</p>
                 </div>
                 <div class="card summary">
                     <p class="summary-label">Pending Estimates</p>
-                    <p class="summary-value">4</p>
+                    <p class="summary-value">{{ stats.pending_estimates }}</p>
                 </div>
                 <div class="card summary">
                     <p class="summary-label">Unpaid Invoices</p>
-                    <p class="summary-value">$24,750</p>
+                    <p class="summary-value">{{ stats.unpaid_total|currency }}</p>
                 </div>
                 <div class="card summary">
                     <p class="summary-label">Upcoming Tasks</p>
-                    <p class="summary-value">6</p>
+                    <p class="summary-value">{{ tasks.count }}</p>
                 </div>
             </section>
 
@@ -57,7 +58,7 @@
 
                 <!-- Active projects table -->
                 <section class="card">
-                    <h2>Active Projects</h2>
+                    <h2>Open Projects</h2>
                     <div class="table-wrap">
                         <table>
                             <thead>
@@ -72,81 +73,19 @@
                                 </tr>
                             </thead>
                             <tbody>
+                                {% for project in projects %}
                                 <tr>
-                                    <td>Kitchen Remodel – Oak Forest</td>
-                                    <td>Maria Hernandez</td>
-                                    <td>Daniel Carter</td>
-                                    <td><span class="status progress">In Progress</span></td>
-                                    <td>$68,500</td>
-                                    <td><div class="bar"><div class="bar-fill" style="width: 60%;"></div></div><span class="pct">60%</span></td>
-                                    <td>Nov 15, 2026</td>
+                                    <td><a class="project-name-link" href="{{ url_for('project_details', project_id=project.project_id) }}">{{ project.name }}</a></td>
+                                    <td>{{ project.client_name }}</td>
+                                    <td>{{ project.manager_name or '—' }}</td>
+                                    <td><span class="status {{ project.status|status_class }}">{{ project.status }}</span></td>
+                                    <td>{{ project.budget_amount|currency }}</td>
+                                    <td><div class="bar"><div class="bar-fill" style="width: {{ project.progress_percent }}%;"></div></div><span class="pct">{{ project.progress_percent }}%</span></td>
+                                    <td>{{ project.due_date|short_date }}</td>
                                 </tr>
-                                <tr>
-                                    <td>Roof Replacement – Katy</td>
-                                    <td>James Thompson</td>
-                                    <td>Carlos Reyes</td>
-                                    <td><span class="status near">Near Completion</span></td>
-                                    <td>$24,200</td>
-                                    <td><div class="bar"><div class="bar-fill" style="width: 90%;"></div></div><span class="pct">90%</span></td>
-                                    <td>Nov 12, 2026</td>
-                                </tr>
-                                <tr>
-                                    <td>Master Bath Addition – Sugar Land</td>
-                                    <td>Angela Brooks</td>
-                                    <td>Daniel Carter</td>
-                                    <td><span class="status planning">Planning</span></td>
-                                    <td>$41,000</td>
-                                    <td><div class="bar"><div class="bar-fill" style="width: 15%;"></div></div><span class="pct">15%</span></td>
-                                    <td>Jan 30, 2027</td>
-                                </tr>
-                                <tr>
-                                    <td>Storm Damage Repair – Cypress</td>
-                                    <td>Robert Nguyen</td>
-                                    <td>Carlos Reyes</td>
-                                    <td><span class="status progress">In Progress</span></td>
-                                    <td>$32,750</td>
-                                    <td><div class="bar"><div class="bar-fill" style="width: 45%;"></div></div><span class="pct">45%</span></td>
-                                    <td>Dec 05, 2026</td>
-                                </tr>
-                                <tr>
-                                    <td>Heights Garage Conversion</td>
-                                    <td>Olivia Martinez</td>
-                                    <td>Daniel Carter</td>
-                                    <td><span class="status progress">In Progress</span></td>
-                                    <td>$56,800</td>
-                                    <td><div class="bar"><div class="bar-fill" style="width: 38%;"></div></div><span class="pct">38%</span></td>
-                                    <td>Jan 08, 2027</td>
-                                </tr>
-
-                                <tr>
-                                    <td>Pearland Patio Extension</td>
-                                    <td>David Chen</td>
-                                    <td>Carlos Reyes</td>
-                                    <td><span class="status progress">In Progress</span></td>
-                                    <td>$18,900</td>
-                                    <td><div class="bar"><div class="bar-fill" style="width: 75%;"></div></div><span class="pct">75%</span></td>
-                                    <td>Nov 20, 2026</td>
-                                </tr>
-
-                                <tr>
-                                    <td>Spring Office Build-Out</td>
-                                    <td>Lakeside Dental Group</td>
-                                    <td>James Wilson</td>
-                                    <td><span class="status progress">In Progress</span></td>
-                                    <td>$124,000</td>
-                                    <td><div class="bar"><div class="bar-fill" style="width: 68%;"></div></div><span class="pct">68%</span></td>
-                                    <td>Dec 18, 2026</td>
-                                </tr>
-
-                                <tr>
-                                    <td>West University Flooring Upgrade</td>
-                                    <td>Rachel Morgan</td>
-                                    <td>Daniel Carter</td>
-                                    <td><span class="status progress">In Progress</span></td>
-                                    <td>$27,600</td>
-                                    <td><div class="bar"><div class="bar-fill" style="width: 88%;"></div></div><span class="pct">88%</span></td>
-                                    <td>Nov 10, 2026</td>
-                                </tr>
+                                {% else %}
+                                <tr class="empty-row"><td colspan="7">No open projects.</td></tr>
+                                {% endfor %}
                             </tbody>
                         </table>
                     </div>
@@ -158,42 +97,26 @@
                     <section class="card">
                         <h2>Upcoming Tasks</h2>
                         <ul class="task-list">
+                            {% for task in tasks["items"] %}
                             <li>
-                                <p class="task-name">Final roof inspection</p>
-                                <p class="task-meta">Roof Replacement – Katy · Nov 3</p>
+                                <p class="task-name">{{ task.name }}</p>
+                                <p class="task-meta">{{ task.project_name }} &middot;
+                                    {% if task.overdue %}<span class="overdue-date">Overdue: {{ task.due_date|short_date }}</span>{% else %}{{ task.due_date|short_date }}{% endif %}</p>
                             </li>
-                            <li>
-                                <p class="task-name">Order kitchen cabinets</p>
-                                <p class="task-meta">Kitchen Remodel – Oak Forest · Nov 4</p>
-                            </li>
-                            <li>
-                                <p class="task-name">Permit submission</p>
-                                <p class="task-meta">Master Bath Addition – Sugar Land · Nov 5</p>
-                            </li>
-                            <li>
-                                <p class="task-name">Drywall delivery</p>
-                                <p class="task-meta">Storm Damage Repair – Cypress · Nov 6</p>
-                            </li>
-                            <li>
-                                <p class="task-name">Confirm electrical rough-in inspection</p>
-                                <p class="task-meta">Heights Garage Conversion &middot; Nov 6</p>
-                            </li>
-                            <li>
-                                <p class="task-name">Review flooring punch list</p>
-                                <p class="task-meta">West University Flooring Upgrade &middot; Nov 9</p>
-                            </li>
+                            {% else %}
+                            <li><p class="task-meta">No open tasks.</p></li>
+                            {% endfor %}
                         </ul>
                     </section>
 
                     <section class="card">
                         <h2>Recent Activity</h2>
                         <ul class="activity-list">
-                            <li><span class="dot"></span>Invoice #1042 marked as paid <small>2 hours ago</small></li>
-                            <li><span class="dot"></span>Progress photos uploaded <small>Yesterday</small></li>
-                            <li><span class="dot"></span>New estimate created <small>Yesterday</small></li>
-                            <li><span class="dot"></span>Change order submitted <small>2 days ago</small></li>
-                            <li><span class="dot"></span>Pearland Patio Extension concrete delivery confirmed <small>2 days ago</small></li>
-                            <li><span class="dot"></span>Clear Lake Deck Restoration completed <small>Oct 23, 2026</small></li>
+                            {% for event in activity %}
+                            <li><span class="dot"></span>{{ event.text }} <small>{{ event.at|short_date }}</small></li>
+                            {% else %}
+                            <li>No activity yet.</li>
+                            {% endfor %}
                         </ul>
                     </section>
 
