@@ -66,7 +66,7 @@
                 </section>
 
                 <div class="form-actions">
-                    <a href="{{ url_for('documents') }}" class="btn-outline">Cancel</a>
+                    <a href="{{ url_for('project_details', project_id=request.args.project|int, tab='documents') if request.args.get('from') == 'project' and request.args.get('project', '')|int else url_for('documents') }}" class="btn-outline">Cancel</a>
                     <button type="submit" class="btn">Upload Document</button>
                 </div>
             </form>

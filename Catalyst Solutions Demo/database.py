@@ -953,6 +953,82 @@ def get_photos(user_id, role, project_id=None):
     return _visible_files("photos", user_id, role, project_id)
 
 
+def get_project_assignments(project_id):
+    """Subcontractors assigned to one project (employee project page, Subcontractors tab)."""
+    return get_db().execute(
+        """SELECT pa.assignment_id, pa.scope_of_work, pa.status, pa.assigned_date,
+                  s.subcontractor_id, s.company_name, s.contact_name, s.trade, s.email, s.phone,
+                  s.status AS subcontractor_status, s.user_id
+           FROM project_assignments pa
+           JOIN subcontractors s ON s.subcontractor_id = pa.subcontractor_id
+           WHERE pa.project_id = ?
+           ORDER BY s.company_name""", (project_id,)).fetchall()
+
+
+def get_project_costs(project_id):
+    """Estimated vs actual by cost category for one project, plus its expense rows (Costs tab).
+    Same numbers as the Job Costs page."""
+    db = get_db()
+    estimated = {r["category"]: float(r["amount"]) for r in db.execute(
+        """SELECT c.name AS category, b.estimated_amount AS amount
+           FROM project_budget_items b JOIN cost_categories c ON c.category_id = b.category_id
+           WHERE b.project_id = ?""", (project_id,))}
+    expenses = get_expenses(project_id) + approved_subcontractor_costs(project_id)
+    expenses.sort(key=lambda e: (e["expense_date"] or "", str(e["id"])), reverse=True)
+    actual = {}
+    for e in expenses:
+        actual[e["category"]] = actual.get(e["category"], 0) + float(e["amount"] or 0)
+    categories = [r[0] for r in db.execute("SELECT name FROM cost_categories WHERE is_active = 1 ORDER BY category_id")]
+    categories += [c for c in list(estimated) + list(actual) if c not in categories]
+    rows = [{"category": c, "estimated": estimated.get(c, 0.0), "actual": actual.get(c, 0.0)} for c in categories]
+    for row in rows:
+        row["variance"] = row["actual"] - row["estimated"]
+    return {"rows": rows, "expenses": expenses,
+            "estimated_total": sum(r["estimated"] for r in rows), "actual_total": sum(r["actual"] for r in rows)}
+
+
+def get_project_activity(project_id, limit=6):
+    """Recent events for one project, built from timestamps already stored on its records."""
+    return get_db().execute(
+        """SELECT * FROM (
+             SELECT datetime(created_at, 'localtime') AS at, 'Project created' AS text
+               FROM projects WHERE project_id = :p
+             UNION ALL
+             SELECT issue_date, 'Invoice ' || invoice_number || ' sent'
+               FROM invoices WHERE project_id = :p AND status != 'Draft'
+             UNION ALL
+             SELECT paid_at, 'Invoice ' || invoice_number || ' paid'
+               FROM invoices WHERE project_id = :p AND paid_at IS NOT NULL
+             UNION ALL
+             SELECT datetime(created_at, 'localtime'), document_type || ' uploaded: ' || original_filename
+               FROM documents WHERE project_id = :p
+             UNION ALL
+             SELECT datetime(created_at, 'localtime'), 'Photo uploaded: ' || title
+               FROM photos WHERE project_id = :p
+             UNION ALL
+             SELECT datetime(si.submitted_at, 'localtime'), s.company_name || ' submitted invoice ' || si.invoice_number
+               FROM subcontractor_invoices si
+               JOIN project_assignments pa ON pa.assignment_id = si.assignment_id
+               JOIN subcontractors s ON s.subcontractor_id = pa.subcontractor_id
+               WHERE pa.project_id = :p
+           ) WHERE at IS NOT NULL ORDER BY at DESC LIMIT :n""", {"p": project_id, "n": limit}).fetchall()
+
+
+def update_project(project_id, data):
+    """Save the Edit Project form (already validated). The client is managed on the Clients page."""
+    db = get_db()
+    with db:
+        db.execute(
+            """UPDATE projects SET name = ?, project_type = ?, description = ?, address = ?,
+                      project_manager_id = ?, status = ?, budget_amount = ?, progress_percent = ?,
+                      start_date = ?, due_date = ?
+               WHERE project_id = ?""",
+            (data["name"], data["project_type"], data.get("description") or None, data["address"] or None,
+             data["manager_id"], data["status"], data["budget"],
+             100 if data["status"] == "Completed" else data["progress"],
+             data.get("start_date") or None, data.get("due_date") or None, project_id))
+
+
 def get_visible_file(table, file_id, user_id, role):
     """One document/photo if this login may see it, otherwise None."""
     key = _FILE_TABLES[table][0]

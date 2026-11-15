@@ -470,4 +470,19 @@ document.addEventListener("DOMContentLoaded", async () => {
   document.addEventListener("keydown", (ev) => {
     if (ev.key === "Escape") document.querySelectorAll(".modal-backdrop:not([hidden])").forEach(closeModal);
   });
+
+  // Links from a project page: /invoices?open=<invoice id> or /invoices?new=1&project=<project id>
+  const params = new URLSearchParams(window.location.search);
+  const openId = Number(params.get("open"));
+  const projectId = Number(params.get("project"));
+  if (openId && findInvoice(openId)) {
+    openInvoice(openId);
+  } else if (params.get("new")) {
+    openInvoice();
+    if (findProject(projectId)) {
+      $("#invProject").value = projectId;
+      $("#invClient").value = clientNameForProject(projectId);
+    }
+  }
+  if (params.has("open") || params.has("new")) history.replaceState(null, "", window.location.pathname);
 });
