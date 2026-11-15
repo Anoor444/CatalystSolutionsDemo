@@ -8,7 +8,7 @@
   if (role === 'client' || role === 'subcontractor') return;
   // Preserve the original employee screens and their existing demo behavior.
   // These employee pages (and Clients/Subcontractors) use the database (server-rendered), so the browser demo layer leaves them alone.
-  if (role === 'employee' && (['/dashboard', '/projects', '/new-project', '/estimates', '/invoices', '/job-costs', '/schedule'].includes(path)
+  if (role === 'employee' && (['/dashboard', '/projects', '/new-project', '/estimates', '/invoices', '/job-costs', '/schedule', '/search'].includes(path)
       || /^\/(clients|subcontractors)(\/|$)/.test(path))) return;
   // The employee project page and all of its tabs are server-rendered from the database (step 9).
   if (role === 'employee' && /^\/project\/\d+/.test(path)) return;

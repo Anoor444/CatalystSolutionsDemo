@@ -115,7 +115,7 @@ def init_app(app, database_file):
 
         from seed_data import (import_legacy_file_lists, load_billing_samples, load_cost_samples,
                                load_directory_samples, load_file_samples, load_sample_data,
-                               load_subcontractor_invoice_samples, load_task_samples)
+                               load_subcontractor_invoice_samples, load_task_samples, load_demo_client_estimate)
 
         def count(table):
             return connection.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]
@@ -135,6 +135,7 @@ def init_app(app, database_file):
                 load_file_samples(connection)       # database from before step 7: sample documents/photos
             if sub_invoices_are_new:
                 load_subcontractor_invoice_samples(connection)  # database from before step 8
+            load_demo_client_estimate(connection)   # step 10: once (skips if it is already there)
         if files_are_new:
             # Anything uploaded before step 7 was listed in instance/documents.json and photos.json.
             import_legacy_file_lists(connection, os.path.dirname(DATABASE_FILE))
@@ -1027,6 +1028,41 @@ def update_project(project_id, data):
              data["manager_id"], data["status"], data["budget"],
              100 if data["status"] == "Completed" else data["progress"],
              data.get("start_date") or None, data.get("due_date") or None, project_id))
+
+
+def search_everything(text, limit=20):
+    """Header search (employee): projects, clients, invoices, estimates and subcontractors whose
+    names, numbers or contact details contain the text (case-insensitive)."""
+    like = "%" + text.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%"
+    db = get_db()
+
+    def find(sql):
+        return db.execute(sql.replace("~", "LIKE :q ESCAPE '\\'"), {"q": like, "n": limit}).fetchall()
+
+    return {
+        "projects": find("""SELECT p.project_id, p.name, p.project_number, p.status, c.name AS client_name
+                            FROM projects p JOIN clients c ON c.client_id = p.client_id
+                            WHERE p.name ~ OR p.project_number ~ OR c.name ~ OR COALESCE(p.address, '') ~
+                            ORDER BY p.name LIMIT :n"""),
+        "clients": find("""SELECT client_id, name, company, email, phone, status FROM clients
+                           WHERE name ~ OR COALESCE(company, '') ~ OR COALESCE(email, '') ~ OR COALESCE(phone, '') ~
+                           ORDER BY name LIMIT :n"""),
+        "invoices": find("""SELECT i.invoice_id, i.invoice_number, i.status, i.total_amount, i.due_date,
+                                  p.name AS project_name, c.name AS client_name
+                            FROM invoices i JOIN projects p ON p.project_id = i.project_id
+                            JOIN clients c ON c.client_id = p.client_id
+                            WHERE i.invoice_number ~ OR p.name ~ OR c.name ~
+                            ORDER BY i.invoice_id DESC LIMIT :n"""),
+        "estimates": find("""SELECT e.estimate_id, e.estimate_number, e.title, e.status, e.total_amount,
+                                   c.name AS client_name
+                             FROM estimates e JOIN clients c ON c.client_id = e.client_id
+                             WHERE e.estimate_number ~ OR e.title ~ OR c.name ~
+                             ORDER BY e.estimate_id DESC LIMIT :n"""),
+        "subcontractors": find("""SELECT subcontractor_id, company_name, contact_name, trade, status FROM subcontractors
+                                  WHERE company_name ~ OR COALESCE(contact_name, '') ~ OR COALESCE(trade, '') ~
+                                        OR COALESCE(email, '') ~
+                                  ORDER BY company_name LIMIT :n"""),
+    }
 
 
 def get_visible_file(table, file_id, user_id, role):

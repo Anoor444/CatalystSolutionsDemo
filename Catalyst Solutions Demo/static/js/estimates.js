@@ -461,4 +461,10 @@ document.addEventListener("DOMContentLoaded", async () => {
   document.addEventListener("keydown", (ev) => {
     if (ev.key === "Escape") document.querySelectorAll(".modal-backdrop:not([hidden])").forEach(closeModal);
   });
+
+  // Links from search results: /estimates?open=<estimate id>
+  const params = new URLSearchParams(window.location.search);
+  const openId = Number(params.get("open"));
+  if (openId && findEstimate(openId)) openEstimate(openId);
+  if (params.has("open")) history.replaceState(null, "", window.location.pathname);
 });
