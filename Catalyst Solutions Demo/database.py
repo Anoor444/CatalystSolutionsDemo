@@ -60,16 +60,27 @@ def init_app(app, database_file):
     app.cli.add_command(reset_demo_data_command)
 
     with connect() as connection:
+        # Step 4 replaced the original (never used) tasks table with a fuller one.
+        columns = [row[1] for row in connection.execute("PRAGMA table_info(tasks)")]
+        if columns and "priority" not in columns and \
+                connection.execute("SELECT COUNT(*) FROM tasks").fetchone()[0] == 0:
+            connection.execute("DROP TABLE tasks")
+            columns = []
+        tasks_table_is_new = not columns
+
         create_tables(connection)
-        from seed_data import load_billing_samples, load_sample_data
+        from seed_data import load_billing_samples, load_sample_data, load_task_samples
 
         def count(table):
             return connection.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]
 
         if count("projects") == 0:
             load_sample_data(connection)          # brand-new database: everything
-        elif count("estimates") == 0 and count("invoices") == 0:
-            load_billing_samples(connection)      # database from step 1: add sample estimates/invoices
+        else:
+            if count("estimates") == 0 and count("invoices") == 0:
+                load_billing_samples(connection)  # database from step 1: add sample estimates/invoices
+            if tasks_table_is_new:
+                load_task_samples(connection)     # database from before step 4: add sample tasks
 
         # Databases created before step 3 stamped the sample projects with their creation time,
         # which would fill "Recent Activity" with 12 "project created" entries. Backdate them once.
@@ -502,3 +513,88 @@ def get_dashboard():
         """
     ).fetchall()
     return {"stats": stats, "projects": open_projects, "activity": events}
+
+
+# ---------------------------------------------------------------------
+# Tasks / Schedule (RTM A11)
+# ---------------------------------------------------------------------
+TASK_STATUSES = ("Not Started", "In Progress", "Completed")
+TASK_PRIORITIES = ("Low", "Medium", "High")
+
+# Same field names the Schedule page's JavaScript already uses.
+_TASK_SELECT = """
+    SELECT t.task_id AS id, t.project_id, p.name AS project_name, t.title AS name,
+           COALESCE(t.description, '') AS description, COALESCE(t.assigned_to, '') AS assigned_to,
+           t.start_date, t.due_date, t.priority, t.status
+    FROM tasks t JOIN projects p ON p.project_id = t.project_id
+"""
+
+
+def get_tasks(project_id=None):
+    if project_id is None:
+        rows = get_db().execute(_TASK_SELECT + " ORDER BY t.due_date, t.task_id")
+    else:
+        rows = get_db().execute(_TASK_SELECT + " WHERE t.project_id = ? ORDER BY t.due_date, t.task_id", (project_id,))
+    return [dict(row) for row in rows]
+
+
+def get_task(task_id):
+    row = get_db().execute(_TASK_SELECT + " WHERE t.task_id = ?", (task_id,)).fetchone()
+    if row is None:
+        raise RuleError("Task not found.", 404)
+    return dict(row)
+
+
+def get_schedule_data():
+    projects = get_db().execute("SELECT project_id AS id, name FROM projects ORDER BY name").fetchall()
+    return {
+        "projects": [dict(p) for p in projects],
+        "statuses": list(TASK_STATUSES),
+        "priorities": list(TASK_PRIORITIES),
+        "tasks": get_tasks(),
+    }
+
+
+def get_open_tasks():
+    return [task for task in get_tasks() if task["status"] != "Completed"]
+
+
+def create_task(data):
+    db = get_db()
+    with db:
+        cursor = db.execute(
+            """INSERT INTO tasks (project_id, title, description, assigned_to, start_date, due_date, priority, status)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+            (data["project_id"], data["name"], data["description"] or None, data["assigned_to"] or None,
+             data["start_date"], data["due_date"], data["priority"], data["status"]),
+        )
+    return get_task(cursor.lastrowid)
+
+
+def update_task(task_id, data):
+    get_task(task_id)
+    db = get_db()
+    with db:
+        db.execute(
+            """UPDATE tasks SET project_id = ?, title = ?, description = ?, assigned_to = ?,
+                                start_date = ?, due_date = ?, priority = ?, status = ?
+               WHERE task_id = ?""",
+            (data["project_id"], data["name"], data["description"] or None, data["assigned_to"] or None,
+             data["start_date"], data["due_date"], data["priority"], data["status"], task_id),
+        )
+    return get_task(task_id)
+
+
+def set_task_status(task_id, status):
+    get_task(task_id)
+    db = get_db()
+    with db:
+        db.execute("UPDATE tasks SET status = ? WHERE task_id = ?", (status, task_id))
+    return get_task(task_id)
+
+
+def delete_task(task_id):
+    get_task(task_id)
+    db = get_db()
+    with db:
+        db.execute("DELETE FROM tasks WHERE task_id = ?", (task_id,))

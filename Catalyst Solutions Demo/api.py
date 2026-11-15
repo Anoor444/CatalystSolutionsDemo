@@ -288,3 +288,68 @@ def invoice_status(invoice_id):
 def delete_invoice(invoice_id):
     database.delete_invoice(invoice_id)
     return "", 204
+
+
+# ---------------------------------------------------------------------
+# Tasks (Schedule page, RTM A11)
+# ---------------------------------------------------------------------
+def task_payload():
+    data, errors = body(), []
+    clean = {
+        "name": text(data, "name", "Task name", errors),
+        "project_id": record_id(data, "project_id", "project", errors, "projects", "project_id"),
+        "description": str(data.get("description") or "").strip(),
+        "assigned_to": str(data.get("assigned_to") or "").strip(),
+        "start_date": iso_date(data, "start_date", "Start date", errors, required=False),
+        "due_date": iso_date(data, "due_date", "Due date", errors),
+        "priority": data.get("priority"),
+        "status": data.get("status"),
+    }
+    if len(clean["name"]) > 150:
+        errors.append("Task name must be 150 characters or fewer.")
+    if len(clean["assigned_to"]) > 100:
+        errors.append("Assigned to must be 100 characters or fewer.")
+    if len(clean["description"]) > 500:
+        errors.append("Description must be 500 characters or fewer.")
+    if clean["priority"] not in database.TASK_PRIORITIES:
+        errors.append("Choose a priority.")
+    if clean["status"] not in database.TASK_STATUSES:
+        errors.append("Choose a status.")
+    if clean["start_date"] and clean["due_date"] and clean["due_date"] < clean["start_date"]:
+        errors.append("The due date cannot be earlier than the start date.")
+    check(errors)
+    return clean
+
+
+@api.get("/tasks")
+@employee_required
+def list_tasks():
+    return jsonify(database.get_tasks())
+
+
+@api.post("/tasks")
+@employee_required
+def create_task():
+    return jsonify(database.create_task(task_payload())), 201
+
+
+@api.put("/tasks/<int:task_id>")
+@employee_required
+def update_task(task_id):
+    return jsonify(database.update_task(task_id, task_payload()))
+
+
+@api.patch("/tasks/<int:task_id>/status")
+@employee_required
+def task_status(task_id):
+    status = body().get("status")
+    if status not in database.TASK_STATUSES:
+        raise ValidationError(["Choose a valid status."])
+    return jsonify(database.set_task_status(task_id, status))
+
+
+@api.delete("/tasks/<int:task_id>")
+@employee_required
+def delete_task(task_id):
+    database.delete_task(task_id)
+    return "", 204

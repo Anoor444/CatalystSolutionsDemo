@@ -23,7 +23,7 @@ from werkzeug.security import check_password_hash, generate_password_hash
 from werkzeug.utils import secure_filename
 
 import database
-from demo_data import get_job_cost_data, get_schedule_data
+from demo_data import get_job_cost_data
 from user_database import DuplicateEmailError, UserDatabase
 
 app = Flask(__name__, instance_path=os.environ.get("APP_INSTANCE_PATH"))
@@ -485,20 +485,12 @@ def dashboard():
 
 def get_upcoming_tasks(limit=6):
     """Open tasks for the Dashboard, soonest first (overdue ones on top).
-    Uses the same sample task list as the Schedule page until tasks move to the database."""
-    schedule_data = get_schedule_data()
-    names = {project["project_id"]: project["name"] for project in database.get_projects()}
+    Same tasks as the Schedule page (database)."""
     today = date.today().isoformat()
-    open_tasks = sorted(
-        (task for task in schedule_data["tasks"] if task["status"] != "Completed"),
-        key=lambda task: task["due_date"],
-    )
+    open_tasks = database.get_open_tasks()   # already sorted by due date
     return {
         "count": len(open_tasks),
-        "items": [
-            {**task, "project_name": names.get(task["project_id"], ""), "overdue": task["due_date"] < today}
-            for task in open_tasks[:limit]
-        ],
+        "items": [{**task, "overdue": task["due_date"] < today} for task in open_tasks[:limit]],
     }
 
 
@@ -553,7 +545,7 @@ def schedule():
     return render_template(
         "schedule.html",
         user_name=session["user"],
-        schedule_data=get_schedule_data(),
+        schedule_data=database.get_schedule_data(),
     )
 
 
@@ -724,6 +716,7 @@ def project_details(project_id):
         "progress": project["progress_percent"], "start": project["start_date"] or "",
         "due": project["due_date"] or "", "description": project["description"] or "",
         "address": project["address"] or "", "subcontractors": [],
+        "tasks": database.get_tasks(project_id),
     }
     return render_template("project_details.html", user_name=session["user"], server_project=server_project)
 

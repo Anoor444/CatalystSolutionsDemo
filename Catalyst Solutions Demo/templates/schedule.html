@@ -3,6 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="csrf-token" content="{{ csrf_token() }}">
     <title>Project Schedule | Buff Bison Construction</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
 </head>
@@ -35,10 +36,6 @@
 
         <main class="content sch-page">
 
-            <p class="demo-notice">
-                <strong>Demo data:</strong> These are sample tasks. Tasks you add, edit, complete, or delete
-                are kept only in this browser tab and reset when the page is reloaded.
-            </p>
 
             <!-- Summary cards (filled in by schedule.js) -->
             <section class="cards" aria-label="Task summary" aria-live="polite">
@@ -167,8 +164,9 @@
     </form>
 </dialog>
 
-<!-- Demo data from Flask (app.py -> demo_data.py). "tojson" safely converts the Python data to JSON. -->
+<!-- Schedule data from the database (app.py -> database.get_schedule_data). "tojson" safely converts it to JSON. -->
 <script id="sch-data" type="application/json">{{ schedule_data | tojson }}</script>
+<script src="{{ url_for('static', filename='js/api-client.js') }}"></script>
 <script src="{{ url_for('static', filename='js/schedule.js') }}"></script>
 </body>
 </html>
