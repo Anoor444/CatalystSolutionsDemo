@@ -86,7 +86,8 @@
     document.querySelector('#project-search').oninput=filter;document.querySelector('#status-filter').onchange=filter;
     const cards=main.querySelectorAll('.summary-value'), all=D.projects(); [all.length,all.filter(p=>p.status==='In Progress').length,all.filter(p=>p.status==='Planning').length,all.filter(p=>p.status==='Completed').length].forEach((v,i)=>{if(cards[i])cards[i].textContent=v;});
   }
-  function actual(p){return D.actualCost(p);}
+  function serverFor(p){return role==='employee'&&window.serverProject&&window.serverProject.id===p.id?window.serverProject:null;}
+  function actual(p){const s=serverFor(p);return s?s.actual:D.actualCost(p);}
   function projectDetails() {
     const query=new URLSearchParams(location.search);
     const id=Number(query.get('project') || path.split('/').pop());
@@ -105,7 +106,7 @@
     const names=role==='employee'?['Costs','Invoices','Documents','Photos','Schedule','Subcontractors','Estimate']:role==='client'?['Estimate','Invoices','Schedule']:['Photos','Invoices','Schedule'];
     function show(name){tabs.querySelectorAll('button').forEach(b=>{b.setAttribute('aria-selected',String(b.textContent===name));b.className=b.textContent===name?'btn':'btn-outline';});content.innerHTML=`<h2>${E(name)}</h2>`;
       if(name==='Invoices'){content.innerHTML+='<div class="portal-actions" data-actions></div><div data-invoice-list data-project="'+p.id+'"></div>';if(role!=='client')button(role==='employee'?'Create Invoice':'Submit Invoice',()=>invoiceForm(p.id),content.querySelector('[data-actions]'));renderInvoices();}
-      if(name==='Costs'){const c=D.read('costs',{expenses:[]}); content.innerHTML+=`<p>Estimated ${M(p.budget)} · Actual ${M(actual(p))}</p>`+table(['Description','Category','Date','Actual'],c.expenses.filter(e=>e.project_id===p.id).map(e=>`<tr><td>${E(e.description)}</td><td>${E(e.category)}</td><td>${E(e.expense_date)}</td><td>${M(e.amount)}</td></tr>`))+`<a class="btn-outline" href="/job-costs?project=${p.id}">Manage costs</a>`;}
+      if(name==='Costs'){const c=serverFor(p)?{expenses:serverFor(p).expenses}:D.read('costs',{expenses:[]}); content.innerHTML+=`<p>Estimated ${M(p.budget)} · Actual ${M(actual(p))}</p>`+table(['Description','Category','Date','Actual'],c.expenses.filter(e=>e.project_id===p.id).map(e=>`<tr><td>${E(e.description)}</td><td>${E(e.category)}</td><td>${E(e.expense_date)}</td><td>${M(e.amount)}</td></tr>`))+`<a class="btn-outline" href="/job-costs?project=${p.id}">Manage costs</a>`;}
       if(name==='Documents'||name==='Photos'){const photo=name==='Photos';content.innerHTML+='<div class="portal-actions" data-actions></div><div data-files></div>';button(photo?'Upload Photo':'Attach Receipt / Document',()=>attachmentForm(p.id,photo,()=>show(name)),content.querySelector('[data-actions]'));renderFiles(content.querySelector('[data-files]'),p.id,photo);}
       if(name==='Schedule'){const tasks=(role==='employee'&&window.serverProject&&window.serverProject.id===p.id&&window.serverProject.tasks)||D.read('tasks',[]).filter(t=>t.project_id===p.id);content.innerHTML+=table(['Task','Assigned to','Due','Status'],tasks.map(t=>`<tr><td>${E(t.name)}</td><td>${E(t.assigned_to)}</td><td>${E(t.due_date)}</td><td>${E(t.status)}</td></tr>`));if(role==='employee')content.innerHTML+=`<a class="btn-outline" href="/schedule?project=${p.id}">Manage tasks</a>`;}
       if(name==='Subcontractors')renderSubcontractors(content,p,()=>show(name));

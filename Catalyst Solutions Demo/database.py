@@ -22,7 +22,7 @@ SCHEMA_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "schema.s
 
 # Tables cleared by reset-demo-data, children first so foreign keys are happy.
 BUSINESS_TABLES = (
-    "documents", "photos", "tasks", "subcontractor_invoices", "project_assignments",
+    "documents", "photos", "tasks", "subcontractor_invoices", "project_assignments", "project_budget_items",
     "receipts", "invoice_line_items", "invoices", "projects",
     "estimate_line_items", "estimates", "subcontractors", "clients", "cost_categories",
 )
@@ -68,8 +68,16 @@ def init_app(app, database_file):
             columns = []
         tasks_table_is_new = not columns
 
+        # Step 5 rebuilt receipts (it only held placeholder "costs to date" rows) and
+        # added project_budget_items. Both are refilled with sample costs below.
+        receipt_columns = [row[1] for row in connection.execute("PRAGMA table_info(receipts)")]
+        if receipt_columns and "description" not in receipt_columns:
+            connection.execute("DROP TABLE receipts")
+        costs_are_new = not connection.execute(
+            "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'project_budget_items'").fetchone()
+
         create_tables(connection)
-        from seed_data import load_billing_samples, load_sample_data, load_task_samples
+        from seed_data import load_billing_samples, load_cost_samples, load_sample_data, load_task_samples
 
         def count(table):
             return connection.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]
@@ -81,6 +89,8 @@ def init_app(app, database_file):
                 load_billing_samples(connection)  # database from step 1: add sample estimates/invoices
             if tasks_table_is_new:
                 load_task_samples(connection)     # database from before step 4: add sample tasks
+            if costs_are_new:
+                load_cost_samples(connection)     # database from before step 5: add sample job costs
 
         # Databases created before step 3 stamped the sample projects with their creation time,
         # which would fill "Recent Activity" with 12 "project created" entries. Backdate them once.
@@ -368,6 +378,8 @@ def convert_estimate(estimate_id, data):
         project_number = f"BB-{project_id:04d}"
         db.execute("UPDATE projects SET project_number = ? WHERE project_id = ?", (project_number, project_id))
         db.execute("UPDATE estimates SET status = 'Converted' WHERE estimate_id = ?", (estimate_id,))
+        from seed_data import copy_estimate_budget
+        copy_estimate_budget(db, project_id)   # Job Costs "Estimated" column comes from the estimate
     return {"project_id": project_id, "project_number": project_number, "estimate": get_estimate(estimate_id)}
 
 
@@ -598,3 +610,102 @@ def delete_task(task_id):
     db = get_db()
     with db:
         db.execute("DELETE FROM tasks WHERE task_id = ?", (task_id,))
+
+
+# ---------------------------------------------------------------------
+# Job costs (RTM A6, A7)
+# ---------------------------------------------------------------------
+_EXPENSE_SELECT = """
+    SELECT r.receipt_id AS id, r.project_id, r.expense_date, r.description, c.name AS category,
+           CAST(r.amount AS REAL) AS amount, r.receipt_filename AS receipt_name,
+           (r.file_path IS NOT NULL) AS has_receipt
+    FROM receipts r JOIN cost_categories c ON c.category_id = r.category_id
+"""
+
+
+def get_expenses(project_id=None):
+    sql, params = _EXPENSE_SELECT, ()
+    if project_id is not None:
+        sql, params = sql + " WHERE r.project_id = ?", (project_id,)
+    rows = get_db().execute(sql + " ORDER BY r.expense_date DESC, r.receipt_id DESC", params)
+    return [dict(row, has_receipt=bool(row["has_receipt"])) for row in rows]
+
+
+def get_expense(expense_id):
+    row = get_db().execute(_EXPENSE_SELECT + " WHERE r.receipt_id = ?", (expense_id,)).fetchone()
+    if row is None:
+        raise RuleError("Expense not found.", 404)
+    return dict(row, has_receipt=bool(row["has_receipt"]))
+
+
+def get_receipt_file(expense_id):
+    row = get_db().execute(
+        "SELECT file_path, receipt_filename FROM receipts WHERE receipt_id = ?", (expense_id,)).fetchone()
+    if row is None or row["file_path"] is None:
+        raise RuleError("No receipt file is on record for this expense.", 404)
+    return row["file_path"], row["receipt_filename"]
+
+
+def get_job_cost_data():
+    db = get_db()
+    return {
+        "projects": [dict(r) for r in db.execute(
+            "SELECT project_id AS id, name, CAST(budget_amount AS REAL) AS budget FROM projects ORDER BY name")],
+        "categories": [r[0] for r in db.execute(
+            "SELECT name FROM cost_categories WHERE is_active = 1 ORDER BY category_id")],
+        "estimates": [dict(r) for r in db.execute(
+            """SELECT b.project_id, c.name AS category, CAST(b.estimated_amount AS REAL) AS estimated_amount
+               FROM project_budget_items b JOIN cost_categories c ON c.category_id = b.category_id""")],
+        "expenses": get_expenses(),
+    }
+
+
+def category_id_for(name):
+    row = get_db().execute(
+        "SELECT category_id FROM cost_categories WHERE name = ? AND is_active = 1", (name,)).fetchone()
+    return row["category_id"] if row else None
+
+
+def create_expense(data, user_id):
+    db = get_db()
+    with db:
+        cursor = db.execute(
+            """INSERT INTO receipts (project_id, category_id, uploaded_by, description, amount, expense_date,
+                                     receipt_filename, file_path)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+            (data["project_id"], data["category_id"], user_id, data["description"], data["amount"],
+             data["expense_date"], data.get("receipt_filename"), data.get("file_path")),
+        )
+    return get_expense(cursor.lastrowid)
+
+
+def update_expense(expense_id, data):
+    """Returns (updated expense, stored file name that is no longer used or None)."""
+    old_file = get_db().execute("SELECT file_path FROM receipts WHERE receipt_id = ?", (expense_id,)).fetchone()
+    if old_file is None:
+        raise RuleError("Expense not found.", 404)
+    replaced = None
+    db = get_db()
+    with db:
+        db.execute(
+            """UPDATE receipts SET project_id = ?, category_id = ?, description = ?, amount = ?, expense_date = ?
+               WHERE receipt_id = ?""",
+            (data["project_id"], data["category_id"], data["description"], data["amount"],
+             data["expense_date"], expense_id),
+        )
+        if data.get("file_path"):
+            db.execute("UPDATE receipts SET receipt_filename = ?, file_path = ? WHERE receipt_id = ?",
+                       (data["receipt_filename"], data["file_path"], expense_id))
+            replaced = old_file["file_path"]
+    return get_expense(expense_id), replaced
+
+
+def delete_expense(expense_id):
+    """Returns the stored file name to remove from disk (or None)."""
+    row = get_db().execute("SELECT file_path FROM receipts WHERE receipt_id = ?", (expense_id,)).fetchone()
+    if row is None:
+        raise RuleError("Expense not found.", 404)
+    db = get_db()
+    with db:
+        db.execute("DELETE FROM receipts WHERE receipt_id = ?", (expense_id,))
+    return row["file_path"]

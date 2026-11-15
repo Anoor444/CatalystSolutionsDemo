@@ -14,7 +14,11 @@ deleted) live in database.py.
 from datetime import date
 from functools import wraps
 
-from flask import Blueprint, jsonify, request, session
+import os
+from uuid import uuid4
+
+from flask import Blueprint, current_app, jsonify, request, send_from_directory, session
+from werkzeug.utils import secure_filename
 
 import database
 from database import RuleError
@@ -353,3 +357,126 @@ def task_status(task_id):
 def delete_task(task_id):
     database.delete_task(task_id)
     return "", 204
+
+
+# ---------------------------------------------------------------------
+# Job costs: expenses and receipt files (RTM A6, A7)
+# ---------------------------------------------------------------------
+# The Job Costs form sends multipart/form-data (fields + optional receipt file),
+# so these endpoints read request.form / request.files instead of JSON.
+RECEIPT_EXTENSIONS = {"pdf", "jpg", "jpeg", "png"}
+MAX_RECEIPT_BYTES = 10 * 1024 * 1024
+
+
+def receipt_folder():
+    return os.path.join(current_app.instance_path, "receipt_uploads")
+
+
+def remove_receipt_file(stored_name):
+    if stored_name:
+        try:
+            os.remove(os.path.join(receipt_folder(), stored_name))
+        except OSError:
+            pass
+
+
+def expense_payload():
+    form, errors = request.form, []
+    clean = {
+        "project_id": record_id(form, "project_id", "project", errors, "projects", "project_id"),
+        "expense_date": iso_date(form, "expense_date", "Expense date", errors),
+        "description": text(form, "description", "Expense description", errors),
+        "category_id": database.category_id_for(form.get("category", "")),
+        "amount": 0.0,
+    }
+    if clean["category_id"] is None:
+        errors.append("Choose a cost category.")
+    amount_text = str(form.get("amount", "")).strip()
+    try:
+        amount = float(amount_text)
+        if not (amount >= 0) or amount > MAX_AMOUNT or round(amount, 2) != amount:
+            raise ValueError
+        clean["amount"] = amount
+    except ValueError:
+        errors.append("Amount must be a number of $0.00 or more (up to 2 decimal places).")
+
+    upload = request.files.get("receipt")
+    if upload and upload.filename:
+        original = secure_filename(upload.filename)
+        extension = original.rsplit(".", 1)[-1].lower() if "." in original else ""
+        data = upload.read(MAX_RECEIPT_BYTES + 1)
+        if extension not in RECEIPT_EXTENSIONS:
+            errors.append("Receipts must be PDF, JPG or PNG files.")
+        elif len(data) > MAX_RECEIPT_BYTES:
+            errors.append("Receipts must be 10 MB or smaller.")
+        elif not data:
+            errors.append("The receipt file is empty.")
+        else:
+            clean["_file_bytes"] = data
+            clean["_extension"] = extension
+            clean["receipt_filename"] = upload.filename.strip()[-150:]
+    check(errors)
+    return clean
+
+
+def save_receipt_file(clean):
+    """Writes the uploaded receipt (if any) to disk and records its stored name."""
+    data = clean.pop("_file_bytes", None)
+    extension = clean.pop("_extension", None)
+    if data is None:
+        return
+    os.makedirs(receipt_folder(), exist_ok=True)
+    stored = f"{uuid4().hex}.{extension}"
+    with open(os.path.join(receipt_folder(), stored), "wb") as handle:
+        handle.write(data)
+    clean["file_path"] = stored
+
+
+@api.get("/expenses")
+@employee_required
+def list_expenses():
+    return jsonify(database.get_expenses())
+
+
+@api.post("/expenses")
+@employee_required
+def create_expense():
+    clean = expense_payload()
+    save_receipt_file(clean)
+    try:
+        expense = database.create_expense(clean, session["user_id"])
+    except Exception:
+        remove_receipt_file(clean.get("file_path"))
+        raise
+    return jsonify(expense), 201
+
+
+@api.put("/expenses/<int:expense_id>")
+@employee_required
+def update_expense(expense_id):
+    database.get_expense(expense_id)          # 404 before writing any file
+    clean = expense_payload()
+    save_receipt_file(clean)
+    try:
+        expense, replaced_file = database.update_expense(expense_id, clean)
+    except Exception:
+        remove_receipt_file(clean.get("file_path"))
+        raise
+    remove_receipt_file(replaced_file)
+    return jsonify(expense)
+
+
+@api.delete("/expenses/<int:expense_id>")
+@employee_required
+def delete_expense(expense_id):
+    remove_receipt_file(database.delete_expense(expense_id))
+    return "", 204
+
+
+@api.get("/expenses/<int:expense_id>/receipt")
+@employee_required
+def download_receipt(expense_id):
+    stored, original = database.get_receipt_file(expense_id)
+    if not os.path.exists(os.path.join(receipt_folder(), stored)):
+        raise RuleError("The receipt file is missing from the server.", 404)
+    return send_from_directory(receipt_folder(), stored, download_name=original or stored)

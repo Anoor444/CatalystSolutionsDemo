@@ -16,6 +16,7 @@ COST_CATEGORIES = (
     ("Subcontractor", "Work billed by subcontractors"),
     ("Permits & Fees", "City permits and inspection fees"),
     ("Disposal", "Dumpsters and haul-off"),
+    ("Miscellaneous", "Small supplies and other costs"),
 )
 
 # Project managers shown on the Projects page. They are employee accounts with a
@@ -94,26 +95,10 @@ def load_sample_data(connection):
             (f"BB-{number:04d}", name, kind, client_ids[client], manager_ids[manager],
              status, budget, progress, due, SAMPLE_PROJECT_CREATED_AT),
         )
-        project_id = cursor.lastrowid
-
-        # Costs to date, split into materials and labor receipts so the
-        # Actual Cost column adds up to the same numbers as before.
-        materials = round(actual * 0.6)
-        labor = actual - materials
-        for category, vendor, amount in (
-            ("Materials", "Materials to date (sample data)", materials),
-            ("Labor", "Labor to date (sample data)", labor),
-        ):
-            connection.execute(
-                """
-                INSERT INTO receipts (project_id, category_id, vendor_name, amount, receipt_date)
-                VALUES (?, ?, ?, ?, '2026-10-31')
-                """,
-                (project_id, category_ids[category], vendor, amount),
-            )
 
     load_billing_samples(connection)
     load_task_samples(connection)
+    load_cost_samples(connection)
 
 
 # ---------------------------------------------------------------------
@@ -256,3 +241,87 @@ def load_task_samples(connection):
                VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
             (row[0], title, description, assigned, day(start), day(due), priority, status),
         )
+
+
+# ---------------------------------------------------------------------
+# Sample job costs (backend step 5)
+# ---------------------------------------------------------------------
+# The first four projects get the detailed expenses and category budgets that the
+# Job Costs page used to keep in demo_data.py. The other sample projects get their
+# costs to date as two summary expenses (materials and labor), with a matching
+# 60/40 category budget. Projects converted from an estimate get their category
+# budget from the estimate's line items.
+DEMO_CATEGORY_NAMES = {"Subcontractors": "Subcontractor", "Permits": "Permits & Fees"}
+
+
+def load_cost_samples(connection):
+    from demo_data import get_demo_projects, get_job_cost_data
+
+    connection.execute(
+        "INSERT OR IGNORE INTO cost_categories (name, description) VALUES ('Miscellaneous', 'Small supplies and other costs')"
+    )
+    category_ids = {row[1]: row[0] for row in connection.execute("SELECT category_id, name FROM cost_categories")}
+    project_ids = {row[1]: row[0] for row in connection.execute("SELECT project_id, name FROM projects")}
+
+    def category(name):
+        return category_ids[DEMO_CATEGORY_NAMES.get(name, name)]
+
+    def add_budget(project_id, category_name, amount):
+        connection.execute(
+            """INSERT INTO project_budget_items (project_id, category_id, estimated_amount) VALUES (?, ?, ?)
+               ON CONFLICT (project_id, category_id) DO UPDATE SET estimated_amount = estimated_amount + excluded.estimated_amount""",
+            (project_id, category(category_name), amount),
+        )
+
+    def add_expense(project_id, category_name, description, amount, day, filename=None):
+        connection.execute(
+            """INSERT INTO receipts (project_id, category_id, description, amount, expense_date, receipt_filename)
+               VALUES (?, ?, ?, ?, ?, ?)""",
+            (project_id, category(category_name), description, amount, day, filename),
+        )
+
+    # 1) Detailed sample data for the first four projects
+    demo = get_job_cost_data()
+    demo_names = {p["id"]: p["name"] for p in get_demo_projects()}
+    detailed = set()
+    for row in demo["estimates"]:
+        project_id = project_ids.get(demo_names[row["project_id"]])
+        if project_id:
+            add_budget(project_id, row["category"], row["estimated_amount"])
+            detailed.add(project_id)
+    for row in demo["expenses"]:
+        project_id = project_ids.get(demo_names[row["project_id"]])
+        if project_id:
+            # Sample receipts are names only (no file on disk), so they show as "not on file".
+            add_expense(project_id, row["category"], row["description"], row["amount"],
+                        row["expense_date"], row["receipt_name"])
+
+    # 2) Other sample projects: costs to date as two summary expenses
+    for name, _client, _manager, _status, budget, actual, *_rest in PROJECTS:
+        project_id = project_ids.get(name)
+        if not project_id or project_id in detailed:
+            continue
+        materials = round(actual * 0.6)
+        add_budget(project_id, "Materials", round(budget * 0.6, 2))
+        add_budget(project_id, "Labor", round(budget - round(budget * 0.6, 2), 2))
+        add_expense(project_id, "Materials", "Materials to date", materials, "2026-10-31")
+        add_expense(project_id, "Labor", "Labor to date", actual - materials, "2026-10-31")
+        detailed.add(project_id)
+
+    # 3) Projects converted from an estimate: budget by category from the estimate
+    for (project_id,) in connection.execute(
+        "SELECT project_id FROM projects WHERE estimate_id IS NOT NULL").fetchall():
+        if project_id not in detailed:
+            copy_estimate_budget(connection, project_id)
+
+
+def copy_estimate_budget(connection, project_id):
+    """Category budget for a project = its estimate's line items, totalled by category."""
+    connection.execute(
+        """INSERT OR IGNORE INTO project_budget_items (project_id, category_id, estimated_amount)
+           SELECT p.project_id, li.category_id, SUM(li.line_total)
+           FROM projects p JOIN estimate_line_items li ON li.estimate_id = p.estimate_id
+           WHERE p.project_id = ? AND li.category_id IS NOT NULL
+           GROUP BY li.category_id""",
+        (project_id,),
+    )
