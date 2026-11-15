@@ -26,7 +26,7 @@
         </header>
 
         <main class="content">
-            <form method="POST" action="{{ url_for('upload_document') }}"
+            <form method="POST" action="{{ url_for('upload_document', **request.args) }}"
                   enctype="multipart/form-data" class="form-page">
                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                 <section class="card form-section">
@@ -39,7 +39,7 @@
                             <label for="document">Document File <span class="required">*</span></label>
                             <input type="file" id="document" name="document"
                                    accept=".pdf,.doc,.docx,.xls,.xlsx,.csv,.txt" required>
-                            <small class="form-help">PDF, image, Word, Excel, CSV, or TXT; maximum file size is 2 MB in this browser demo.</small>
+                            <small class="form-help">PDF, Word, Excel, CSV, or TXT; up to 16 MB.</small>
                         </div>
                         <div class="form-field">
                             <label for="document_type">Document Type <span class="required">*</span></label>
@@ -54,10 +54,13 @@
                             </select>
                         </div>
                         <div class="form-field">
-                            <label for="project_name">Associated Project</label>
-                            <input type="text" id="project_name" name="project_name"
-                                   value="{{ request.form.get('project_name', '') }}"
-                                   maxlength="120" placeholder="Enter project name">
+                            <label for="project_id">Associated Project</label>
+                            <select id="project_id" name="project_id">
+                                <option value="">General (no project)</option>
+                                {% for project in projects %}
+                                <option value="{{ project.project_id }}" {% if selected_project|string == project.project_id|string %}selected{% endif %}>{{ project.name }}</option>
+                                {% endfor %}
+                            </select>
                         </div>
                     </div>
                 </section>

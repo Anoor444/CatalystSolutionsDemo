@@ -23,7 +23,7 @@
             </div>
             <div class="header-right">
                 {% if current_role in ('employee', 'subcontractor') %}
-                <a href="{{ url_for('upload_photo') }}" class="btn">+ Upload Photo</a>
+                <a href="{{ url_for('upload_photo', project=filter_project_id) if filter_project_id else url_for('upload_photo') }}" class="btn">+ Upload Photo</a>
                 {% endif %}
                 <div class="profile">
                     <span class="avatar">{{ user_name[0] }}</span>
@@ -38,47 +38,43 @@
 
                 <div class="table-toolbar">
                     <h2>All Project Photos</h2>
-                    <div class="filters">
-                        <!-- PLACEHOLDER: visual only, filtering is not built yet -->
+                    <form class="filters" method="GET" action="{{ url_for('photos') }}">
                         <label for="project-filter" class="filter-label">Filter by Project:</label>
-                        <select id="project-filter" class="filter-select">
-                            <option>All Projects</option>
-                            <option>Riverstone Kitchen Remodel</option>
-                            <option>Sugar Land Roof Replacement</option>
-                            <option>Memorial Bathroom Renovation</option>
-                            <option>Katy Home Addition</option>
+                        <select id="project-filter" name="project" class="filter-select" onchange="this.form.submit()">
+                            <option value="">All Projects</option>
+                            {% for project in projects %}
+                            <option value="{{ project.project_id }}" {% if project.project_id == filter_project_id %}selected{% endif %}>{{ project.name }}</option>
+                            {% endfor %}
                         </select>
-                    </div>
+                        <noscript><button type="submit" class="btn-outline">Filter</button></noscript>
+                    </form>
                 </div>
 
                 <div class="photo-grid">
                     {% for photo in photos %}
                         <article class="photo-box">
-                            <img class="photo-preview photo-image"
-                                 src="{{ url_for('photo_image', photo_id=photo.id) }}"
-                                 alt="{{ photo.title }}">
+                            {% if photo.file_path %}
+                            <a href="{{ url_for('photo_image', photo_id=photo.id) }}" target="_blank" rel="noopener">
+                                <img class="photo-preview photo-image" src="{{ url_for('photo_image', photo_id=photo.id) }}" alt="{{ photo.title }}">
+                            </a>
+                            {% else %}
+                            <div class="photo-preview"><span class="photo-icon">🖼</span> Sample Photo</div>
+                            {% endif %}
                             <div class="photo-info">
                                 <h3>{{ photo.title }}</h3>
-                                <p><strong>Project:</strong> {{ photo.project_name }}</p>
-                                <p><strong>Date Added:</strong> {{ photo.date_added }}</p>
-                                <p><strong>Uploaded By:</strong> {{ photo.uploaded_by }}</p>
+                                <p><strong>Project:</strong> {{ photo.project_name or 'Not specified' }}</p>
+                                <p><strong>Date Added:</strong> {{ photo.date_added|short_date }}</p>
+                                <p><strong>Uploaded By:</strong> {{ photo.uploaded_by_name or '—' }}</p>
+                                {% if current_role == 'employee' %}
+                                <form method="POST" action="{{ url_for('delete_photo', photo_id=photo.id) }}" onsubmit="return confirm('Delete this photo?');">
+                                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                    <button type="submit" class="btn-outline" aria-label="Delete photo {{ photo.title }}">Delete</button>
+                                </form>
+                                {% endif %}
                             </div>
                         </article>
                     {% else %}
-                        {% for photo in sample_photos %}
-                            <article class="photo-box">
-                                <div class="photo-preview">
-                                    <span class="photo-icon">🖼</span>
-                                    Sample Photo
-                                </div>
-                                <div class="photo-info">
-                                    <h3>{{ photo.title }}</h3>
-                                    <p><strong>Project:</strong> {{ photo.project_name }}</p>
-                                    <p><strong>Date Added:</strong> {{ photo.date_added }}</p>
-                                    <p><strong>Uploaded By:</strong> {{ photo.uploaded_by }}</p>
-                                </div>
-                            </article>
-                        {% endfor %}
+                        <p class="placeholder">No photos{% if filter_project_id %} for this project{% endif %} yet.</p>
                     {% endfor %}
                 </div>
             </section>

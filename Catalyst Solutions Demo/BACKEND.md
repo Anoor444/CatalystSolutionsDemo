@@ -51,13 +51,13 @@ The client demo account is linked to the client **Sarah Johnson** (Riverstone Ki
 - [x] New Project form (saves to the database)
 - [x] Dashboard (employee): cards, open projects, upcoming tasks and recent activity from the database
 - [x] Schedule: tasks are stored in the database (add, edit, complete, delete); project pages show the same tasks
-- [ ] Project details tabs other than Schedule and Costs (invoices, documents, photos still use browser demo data)
+- [ ] Project details tabs other than Schedule and Costs (invoices, documents, photos, subcontractors still use browser demo data)
 - [x] Estimates: create, edit, send, approve or reject, delete drafts, convert to a project
 - [x] Invoices: create, edit, send, mark paid or unpaid, delete drafts, PDF
 - [x] Job Costs: expenses, budget by category and receipt uploads (PDF/JPG/PNG, 10 MB) in the database
 - [x] Clients and Subcontractors: list, add, edit (status Active/Inactive instead of delete); subcontractors are assigned to projects from their form (`project_assignments`). A client or subcontractor record is linked to a login automatically when the emails match (used by the portals).
 - [ ] Client and subcontractor portals (still use the sample lists in `app.py`)
-- [ ] Documents and photos (still saved to JSON files in `instance/`)
+- [x] Documents and Photos: records in the database (files in `instance/document_uploads` and `instance/photo_uploads`), real project dropdowns, delete for employees, `?project=<id>` filter. Subcontractors only see their assigned projects (plus their own uploads). Old `documents.json`/`photos.json` lists are imported once.
 
 ## JSON API (api.py)
 
@@ -91,3 +91,7 @@ The SQL is plain and portable. The main changes would be:
 - `TEXT` → `VARCHAR(...)`
 - `datetime('now')` → `CURRENT_TIMESTAMP`
 - `connect()` in `database.py` would use a MySQL driver instead of `sqlite3`
+
+## Who can see what
+
+`database.accessible_project_ids(user_id, role)` returns `None` for employees (all projects), or the set of project ids a subcontractor is assigned to / a client owns. Use it for any page a non-employee can open.

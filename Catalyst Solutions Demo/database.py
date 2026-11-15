@@ -73,6 +73,18 @@ def init_app(app, database_file):
         receipt_columns = [row[1] for row in connection.execute("PRAGMA table_info(receipts)")]
         if receipt_columns and "description" not in receipt_columns:
             connection.execute("DROP TABLE receipts")
+        # Step 7: documents/photos move from JSON files into these tables. The original
+        # tables were never used (always empty), so they are rebuilt with the new columns.
+        files_are_new = False
+        photo_columns = [row[1] for row in connection.execute("PRAGMA table_info(photos)")]
+        if not photo_columns or ("title" not in photo_columns and
+                                 connection.execute("SELECT COUNT(*) FROM photos").fetchone()[0] == 0):
+            if photo_columns:
+                connection.execute("DROP TABLE photos")
+                if connection.execute("SELECT COUNT(*) FROM documents").fetchone()[0] == 0:
+                    connection.execute("DROP TABLE documents")
+            files_are_new = True
+
         costs_are_new = not connection.execute(
             "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'project_budget_items'").fetchone()
 
@@ -93,8 +105,8 @@ def init_app(app, database_file):
                     connection.execute(f"ALTER TABLE {table} ADD COLUMN {column} {definition}")
                     directory_upgraded = True
 
-        from seed_data import (load_billing_samples, load_cost_samples, load_directory_samples,
-                               load_sample_data, load_task_samples)
+        from seed_data import (import_legacy_file_lists, load_billing_samples, load_cost_samples,
+                               load_directory_samples, load_file_samples, load_sample_data, load_task_samples)
 
         def count(table):
             return connection.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]
@@ -110,6 +122,11 @@ def init_app(app, database_file):
                 load_cost_samples(connection)     # database from before step 5: add sample job costs
             if directory_upgraded:
                 load_directory_samples(connection)  # database from before step 6: client details, subcontractors
+            if files_are_new:
+                load_file_samples(connection)       # database from before step 7: sample documents/photos
+        if files_are_new:
+            # Anything uploaded before step 7 was listed in instance/documents.json and photos.json.
+            import_legacy_file_lists(connection, os.path.dirname(DATABASE_FILE))
 
         # Databases created before step 3 stamped the sample projects with their creation time,
         # which would fill "Recent Activity" with 12 "project created" entries. Backdate them once.
@@ -838,3 +855,109 @@ def save_subcontractor(data, project_ids, subcontractor_id=None):
 
 def get_project_choices():
     return get_db().execute("SELECT project_id, name, status FROM projects ORDER BY name").fetchall()
+
+
+# ---------------------------------------------------------------------
+# Access by role (used by Documents/Photos now and the portals later)
+# ---------------------------------------------------------------------
+def accessible_project_ids(user_id, role):
+    """None = every project (employees). Otherwise the set of project ids this login may see:
+    a subcontractor's assigned projects, or a client's own projects."""
+    if role == "employee":
+        return None
+    db = get_db()
+    if role == "subcontractor":
+        rows = db.execute(
+            """SELECT pa.project_id FROM project_assignments pa
+               JOIN subcontractors s ON s.subcontractor_id = pa.subcontractor_id
+               WHERE s.user_id = ?""", (user_id,))
+    elif role == "client":
+        rows = db.execute(
+            "SELECT p.project_id FROM projects p JOIN clients c ON c.client_id = p.client_id WHERE c.user_id = ?",
+            (user_id,))
+    else:
+        return set()
+    return {row[0] for row in rows}
+
+
+def projects_for(user_id, role):
+    allowed = accessible_project_ids(user_id, role)
+    rows = get_db().execute("SELECT project_id, name FROM projects ORDER BY name").fetchall()
+    return [row for row in rows if allowed is None or row["project_id"] in allowed]
+
+
+# ---------------------------------------------------------------------
+# Documents and photos
+# ---------------------------------------------------------------------
+_FILE_TABLES = {
+    "documents": ("document_id", "d", "original_filename"),
+    "photos": ("photo_id", "d", "title"),
+}
+
+
+def _visible_files(table, user_id, role, project_id=None):
+    key, alias, order = _FILE_TABLES[table]
+    sql = f"""SELECT {alias}.*, {alias}.{key} AS id, p.name AS project_name, u.name AS uploaded_by_name,
+                     date({alias}.created_at, 'localtime') AS date_added
+              FROM {table} {alias}
+              LEFT JOIN projects p ON p.project_id = {alias}.project_id
+              LEFT JOIN users u ON u.id = {alias}.uploaded_by
+              WHERE 1 = 1"""
+    params = []
+    allowed = accessible_project_ids(user_id, role)
+    if allowed is not None:
+        marks = ",".join("?" * len(allowed)) or "NULL"
+        sql += f" AND ({alias}.project_id IN ({marks}) OR {alias}.uploaded_by = ?)"
+        params += [*allowed, user_id]
+    if project_id is not None:
+        sql += f" AND {alias}.project_id = ?"
+        params.append(project_id)
+    sql += f" ORDER BY {alias}.created_at DESC, {alias}.{key} DESC"
+    return get_db().execute(sql, params).fetchall()
+
+
+def get_documents(user_id, role, project_id=None):
+    return _visible_files("documents", user_id, role, project_id)
+
+
+def get_photos(user_id, role, project_id=None):
+    return _visible_files("photos", user_id, role, project_id)
+
+
+def get_visible_file(table, file_id, user_id, role):
+    """One document/photo if this login may see it, otherwise None."""
+    key = _FILE_TABLES[table][0]
+    for row in _visible_files(table, user_id, role):
+        if row[key] == file_id:
+            return row
+    return None
+
+
+def add_document(project_id, user_id, document_type, original_filename, stored_filename):
+    db = get_db()
+    with db:
+        return db.execute(
+            """INSERT INTO documents (project_id, uploaded_by, document_type, original_filename, file_path)
+               VALUES (?, ?, ?, ?, ?)""",
+            (project_id, user_id, document_type, original_filename, stored_filename)).lastrowid
+
+
+def add_photo(project_id, user_id, title, original_filename, stored_filename):
+    db = get_db()
+    with db:
+        return db.execute(
+            """INSERT INTO photos (project_id, uploaded_by, title, original_filename, file_path)
+               VALUES (?, ?, ?, ?, ?)""",
+            (project_id, user_id, title, original_filename, stored_filename)).lastrowid
+
+
+def delete_file_record(table, file_id):
+    """Deletes the row and returns its stored file name (or None) so the caller can remove the file."""
+    key = _FILE_TABLES[table][0]
+    db = get_db()
+    row = db.execute(f"SELECT file_path FROM {table} WHERE {key} = ?", (file_id,)).fetchone()
+    if row is None:
+        return None
+    with db:
+        db.execute(f"DELETE FROM {table} WHERE {key} = ?", (file_id,))
+    return row["file_path"]

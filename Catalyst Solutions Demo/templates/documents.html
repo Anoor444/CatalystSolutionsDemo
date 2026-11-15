@@ -23,7 +23,7 @@
             </div>
             <div class="header-right">
                 {% if current_role == 'employee' %}
-                <a href="{{ url_for('upload_document') }}" class="btn">+ Upload Document</a>
+                <a href="{{ url_for('upload_document', project=filter_project.project_id) if filter_project else url_for('upload_document') }}" class="btn">+ Upload Document</a>
                 {% endif %}
                 <div class="profile">
                     <span class="avatar">{{ user_name[0] }}</span>
@@ -33,7 +33,7 @@
         </header>
 
         <main class="content" data-directory="documents">
-            <p class="demo-notice">Sample documents are fictional previews without downloadable files. Uploaded documents can be downloaded using their names.</p>
+            {% if filter_project %}<p class="welcome">Showing documents for <strong>{{ filter_project.name }}</strong> &middot; <a class="text-link" href="{{ url_for('documents') }}">Show all documents</a></p>{% endif %}
             <div class="directory-summary" data-directory-summary></div>
 
             <section class="card">
@@ -65,33 +65,33 @@
                                 <th>Associated Project</th>
                                 <th>Date Added</th>
                                 <th>Status</th>
+                                {% if current_role == 'employee' %}<th>Actions</th>{% endif %}
                             </tr>
                         </thead>
                         <tbody>
                             {% for document in documents %}
                                 <tr>
                                     <td>
-                                        <a class="text-link" href="{{ url_for('download_document', document_id=document.id) }}">
-                                            {{ document.filename }}
-                                        </a>
+                                        {% if document.file_path %}
+                                        <a class="text-link" href="{{ url_for('download_document', document_id=document.id) }}">{{ document.original_filename }}</a>
+                                        {% else %}{{ document.original_filename }}{% endif %}
                                     </td>
                                     <td>{{ document.document_type }}</td>
-                                    <td>{{ document.project_name }}</td>
-                                    <td>{{ document.date_added }}</td>
-                                    <td><span class="status progress">Uploaded</span></td>
+                                    <td>{{ document.project_name or 'General' }}</td>
+                                    <td>{{ document.date_added|short_date }}</td>
+                                    <td>{% if document.file_path %}<span class="status progress">Uploaded</span>{% else %}<span class="status planning">Sample</span>{% endif %}</td>
+                                    {% if current_role == 'employee' %}
+                                    <td>
+                                        <form method="POST" action="{{ url_for('delete_document', document_id=document.id) }}" onsubmit="return confirm('Delete this document?');">
+                                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                            <button type="submit" class="btn-outline" aria-label="Delete {{ document.original_filename }}">Delete</button>
+                                        </form>
+                                    </td>
+                                    {% endif %}
                                 </tr>
                             {% endfor %}
-                                {% for document in sample_documents %}
-                                    <tr>
-                                        <td>{{ document.filename }}</td>
-                                        <td>{{ document.document_type }}</td>
-                                        <td>{{ document.project_name }}</td>
-                                        <td>{{ document.date_added }}</td>
-                                        <td><span class="status planning">Sample</span></td>
-                                    </tr>
-                                {% endfor %}
                             <tr data-directory-empty hidden>
-                                <td colspan="5">No documents match your search or filters. Try a different search or clear the filters.</td>
+                                <td colspan="{{ 6 if current_role == 'employee' else 5 }}">No documents match your search or filters. Try a different search or clear the filters.</td>
                             </tr>
                         </tbody>
                     </table>

@@ -32,9 +32,7 @@ app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
 app.config["SESSION_COOKIE_SECURE"] = os.environ.get("COOKIE_SECURE", "").lower() == "true"
 
 DOCUMENT_UPLOAD_FOLDER = os.path.join(app.instance_path, "document_uploads")
-DOCUMENT_METADATA_FILE = os.path.join(app.instance_path, "documents.json")
 PHOTO_UPLOAD_FOLDER = os.path.join(app.instance_path, "photo_uploads")
-PHOTO_METADATA_FILE = os.path.join(app.instance_path, "photos.json")
 USER_DATABASE_FILE = os.path.join(app.instance_path, "users.sqlite3")
 user_database = UserDatabase(USER_DATABASE_FILE)
 DEMO_EMAIL = "demo@buffbison.com"
@@ -50,106 +48,6 @@ ALLOWED_DOCUMENT_EXTENSIONS = {"csv", "doc", "docx", "pdf", "txt", "xls", "xlsx"
 ALLOWED_PHOTO_EXTENSIONS = {"jpg", "jpeg", "png", "gif", "webp"}
 DOCUMENT_TYPES = ("Estimate", "Invoice", "Receipt", "Contract", "Other")
 ROLES = ("employee", "subcontractor", "client")
-SAMPLE_DOCUMENTS = (
-    {
-        "filename": "Kitchen Renovation Estimate.pdf",
-        "document_type": "Estimate",
-        "project_name": "Riverstone Kitchen Remodel",
-        "date_added": "October 12, 2026",
-    },
-    {
-        "filename": "Roofing Invoice.pdf",
-        "document_type": "Invoice",
-        "project_name": "Sugar Land Roof Replacement",
-        "date_added": "October 14, 2026",
-    },
-    {
-        "filename": "Material Receipt.pdf",
-        "document_type": "Receipt",
-        "project_name": "Riverstone Kitchen Remodel",
-        "date_added": "October 15, 2026",
-    },
-    {
-        "filename": "Project Agreement.pdf",
-        "document_type": "Contract",
-        "project_name": "Memorial Bathroom Renovation",
-        "date_added": "October 17, 2026",
-    },
-    {
-        "filename": "HVAC Installation Estimate.pdf",
-        "document_type": "Estimate",
-        "project_name": "Katy Home Addition",
-        "date_added": "October 19, 2026",
-    },
-    {
-        "filename": "Cabinet Deposit Invoice.pdf",
-        "document_type": "Invoice",
-        "project_name": "Riverstone Kitchen Remodel",
-        "date_added": "October 20, 2026",
-    },
-    {
-        "filename": "Tile Purchase Receipt.pdf",
-        "document_type": "Receipt",
-        "project_name": "Memorial Bathroom Renovation",
-        "date_added": "October 21, 2026",
-    },
-    {
-        "filename": "Roofing Subcontract Agreement.pdf",
-        "document_type": "Contract",
-        "project_name": "Sugar Land Roof Replacement",
-        "date_added": "October 22, 2026",
-    },
-    {
-        "filename": "Foundation Inspection Report.pdf",
-        "document_type": "Other",
-        "project_name": "Katy Home Addition",
-        "date_added": "October 23, 2026",
-    },
-    {
-        "filename": "Electrical Materials Receipt.pdf",
-        "document_type": "Receipt",
-        "project_name": "Riverstone Kitchen Remodel",
-        "date_added": "October 25, 2026",
-    },
-    {
-        "filename": "Bathroom Change Order.docx",
-        "document_type": "Contract",
-        "project_name": "Memorial Bathroom Renovation",
-        "date_added": "October 27, 2026",
-    },
-    {
-        "filename": "Project Budget Summary.xlsx",
-        "document_type": "Other",
-        "project_name": "Katy Home Addition",
-        "date_added": "October 30, 2026",
-    },
-)
-SAMPLE_PHOTOS = (
-    {
-        "title": "Kitchen Progress",
-        "project_name": "Riverstone Kitchen Remodel",
-        "date_added": "October 12, 2026",
-        "uploaded_by": "Employee",
-    },
-    {
-        "title": "Roof Installation",
-        "project_name": "Sugar Land Roof Replacement",
-        "date_added": "October 14, 2026",
-        "uploaded_by": "Subcontractor",
-    },
-    {
-        "title": "Bathroom Before Renovation",
-        "project_name": "Memorial Bathroom Renovation",
-        "date_added": "October 15, 2026",
-        "uploaded_by": "Employee",
-    },
-    {
-        "title": "Flooring Installation",
-        "project_name": "Riverstone Kitchen Remodel",
-        "date_added": "October 17, 2026",
-        "uploaded_by": "Subcontractor",
-    },
-)
 CLIENT_PROJECT_NAME = "Riverstone Kitchen Remodel"
 SAMPLE_CLIENT_PROJECTS = (
     {
@@ -896,20 +794,62 @@ def change_password():
     return render_template("change_password.html", user_name=session["user"], error=error)
 
 
+# ---------- Documents and photos ----------
+# Records live in the documents/photos tables (database.py); files are saved in
+# instance/document_uploads and instance/photo_uploads. Employees see everything;
+# subcontractors see their assigned projects plus anything they uploaded.
+
+def _project_filter():
+    """Optional ?project=<id> filter (used by the project page tabs)."""
+    try:
+        return int(request.args["project"])
+    except (KeyError, ValueError):
+        return None
+
+
+def _save_upload(uploaded_file, folder, allowed_extensions):
+    """Validates and saves an uploaded file. Returns (original name, stored name) or raises ValueError."""
+    safe_filename = secure_filename(uploaded_file.filename or "")
+    extension = safe_filename.rsplit(".", 1)[-1].lower() if "." in safe_filename else ""
+    if not safe_filename or extension not in allowed_extensions:
+        raise ValueError
+    stored_filename = f"{uuid4().hex}.{extension}"
+    os.makedirs(folder, exist_ok=True)
+    uploaded_file.save(os.path.join(folder, stored_filename))
+    return uploaded_file.filename.strip()[-150:], stored_filename
+
+
+def _chosen_project(form, projects, required):
+    """Project id from the form, only if it is one this user may choose."""
+    value = form.get("project_id", "")
+    if not value and not required:
+        return None, None
+    try:
+        project_id = int(value)
+    except ValueError:
+        return None, "Choose a project."
+    if project_id not in {project["project_id"] for project in projects}:
+        return None, "Choose a project."
+    return project_id, None
+
+
+def _remove_file(folder, stored_filename):
+    if stored_filename:
+        try:
+            os.remove(os.path.join(folder, stored_filename))
+        except OSError:
+            pass
+
+
 @app.route("/documents")
 @role_required("employee", "subcontractor")
 def documents():
-    if os.path.exists(DOCUMENT_METADATA_FILE):
-        with open(DOCUMENT_METADATA_FILE, encoding="utf-8") as metadata_file:
-            documents = json.load(metadata_file)
-    else:
-        documents = []
-
+    project_id = _project_filter()
     return render_template(
         "documents.html",
         user_name=session["user"],
-        documents=documents,
-        sample_documents=SAMPLE_DOCUMENTS,
+        documents=database.get_documents(session["user_id"], session["role"], project_id),
+        filter_project=database.get_project(project_id) if project_id else None,
     )
 
 
@@ -917,95 +857,68 @@ def documents():
 @role_required("employee")
 def upload_document():
     error = None
+    projects = database.projects_for(session["user_id"], session["role"])
     if request.method == "POST":
         uploaded_file = request.files.get("document")
         document_type = request.form.get("document_type", "")
-        project_name = request.form.get("project_name", "").strip()
+        project_id, project_error = _chosen_project(request.form, projects, required=False)
 
         if uploaded_file is None or not uploaded_file.filename:
             error = "Choose a document to upload."
+        elif document_type not in DOCUMENT_TYPES:
+            error = "Choose a document type."
+        elif project_error:
+            error = project_error
         else:
-            safe_filename = secure_filename(uploaded_file.filename)
-            extension = (
-                safe_filename.rsplit(".", 1)[-1].lower()
-                if "." in safe_filename
-                else ""
-            )
-
-            if not safe_filename or extension not in ALLOWED_DOCUMENT_EXTENSIONS:
+            try:
+                original, stored = _save_upload(uploaded_file, DOCUMENT_UPLOAD_FOLDER, ALLOWED_DOCUMENT_EXTENSIONS)
+            except ValueError:
                 error = "Choose a PDF, Word, Excel, CSV, or TXT file."
-            elif document_type not in DOCUMENT_TYPES:
-                error = "Choose a document type."
             else:
-                document_id = uuid4().hex
-                stored_filename = f"{document_id}.{extension}"
-                os.makedirs(DOCUMENT_UPLOAD_FOLDER, exist_ok=True)
-                uploaded_file.save(os.path.join(DOCUMENT_UPLOAD_FOLDER, stored_filename))
-
-                if os.path.exists(DOCUMENT_METADATA_FILE):
-                    with open(DOCUMENT_METADATA_FILE, encoding="utf-8") as metadata_file:
-                        documents = json.load(metadata_file)
-                else:
-                    documents = []
-
-                documents.append(
-                    {
-                        "id": document_id,
-                        "filename": safe_filename,
-                        "stored_filename": stored_filename,
-                        "document_type": document_type,
-                        "project_name": project_name or "Not specified",
-                        "date_added": date.today().isoformat(),
-                    }
-                )
-                with open(DOCUMENT_METADATA_FILE, "w", encoding="utf-8") as metadata_file:
-                    json.dump(documents, metadata_file, indent=2)
-
-                return redirect(url_for("documents"))
+                database.add_document(project_id, session["user_id"], document_type, original, stored)
+                return redirect(url_for("documents", project=project_id) if request.args.get("project") else url_for("documents"))
 
     return render_template(
         "upload_document.html",
         user_name=session["user"],
         document_types=DOCUMENT_TYPES,
+        projects=projects,
+        selected_project=request.form.get("project_id") or request.args.get("project", ""),
         error=error,
     )
 
 
-@app.route("/documents/<document_id>/download")
+@app.route("/documents/<int:document_id>/download")
 @role_required("employee", "subcontractor")
 def download_document(document_id):
-    if not os.path.exists(DOCUMENT_METADATA_FILE):
+    document = database.get_visible_file("documents", document_id, session["user_id"], session["role"])
+    if document is None or not document["file_path"]:
         return "Document not found.", 404
-
-    with open(DOCUMENT_METADATA_FILE, encoding="utf-8") as metadata_file:
-        documents = json.load(metadata_file)
-
-    document = next((item for item in documents if item["id"] == document_id), None)
-    if document is None:
-        return "Document not found.", 404
-
     return send_from_directory(
         DOCUMENT_UPLOAD_FOLDER,
-        document["stored_filename"],
+        document["file_path"],
         as_attachment=True,
-        download_name=document["filename"],
+        download_name=document["original_filename"],
     )
+
+
+@app.route("/documents/<int:document_id>/delete", methods=["POST"])
+@role_required("employee")
+def delete_document(document_id):
+    _remove_file(DOCUMENT_UPLOAD_FOLDER, database.delete_file_record("documents", document_id))
+    return redirect(request.referrer if (request.referrer or "").startswith(request.host_url) else url_for("documents"))
 
 
 @app.route("/photos")
 @role_required("employee", "subcontractor")
 def photos():
-    if os.path.exists(PHOTO_METADATA_FILE):
-        with open(PHOTO_METADATA_FILE, encoding="utf-8") as metadata_file:
-            photos = json.load(metadata_file)
-    else:
-        photos = []
-
+    project_id = _project_filter()
     return render_template(
         "photos.html",
         user_name=session["user"],
-        photos=photos,
-        sample_photos=SAMPLE_PHOTOS,
+        photos=database.get_photos(session["user_id"], session["role"], project_id),
+        projects=database.projects_for(session["user_id"], session["role"]),
+        filter_project_id=project_id,
     )
 
 
@@ -1013,71 +926,53 @@ def photos():
 @role_required("employee", "subcontractor")
 def upload_photo():
     error = None
+    projects = database.projects_for(session["user_id"], session["role"])
     if request.method == "POST":
         uploaded_file = request.files.get("photo")
         title = request.form.get("title", "").strip()
-        project_name = request.form.get("project_name", "").strip()
+        project_id, project_error = _chosen_project(request.form, projects, required=True)
 
         if uploaded_file is None or not uploaded_file.filename:
             error = "Choose a photo to upload."
         elif not title:
             error = "Enter a title for the photo."
+        elif len(title) > 120:
+            error = "The title must be 120 characters or fewer."
+        elif project_error:
+            error = project_error
         else:
-            safe_filename = secure_filename(uploaded_file.filename)
-            extension = (
-                safe_filename.rsplit(".", 1)[-1].lower()
-                if "." in safe_filename
-                else ""
-            )
-
-            if not safe_filename or extension not in ALLOWED_PHOTO_EXTENSIONS:
+            try:
+                original, stored = _save_upload(uploaded_file, PHOTO_UPLOAD_FOLDER, ALLOWED_PHOTO_EXTENSIONS)
+            except ValueError:
                 error = "Choose a JPG, PNG, GIF, or WebP image."
             else:
-                photo_id = uuid4().hex
-                stored_filename = f"{photo_id}.{extension}"
-                os.makedirs(PHOTO_UPLOAD_FOLDER, exist_ok=True)
-                uploaded_file.save(os.path.join(PHOTO_UPLOAD_FOLDER, stored_filename))
+                database.add_photo(project_id, session["user_id"], title, original, stored)
+                return redirect(url_for("photos", project=project_id) if request.args.get("project") else url_for("photos"))
 
-                if os.path.exists(PHOTO_METADATA_FILE):
-                    with open(PHOTO_METADATA_FILE, encoding="utf-8") as metadata_file:
-                        photos = json.load(metadata_file)
-                else:
-                    photos = []
-
-                photos.append(
-                    {
-                        "id": photo_id,
-                        "filename": safe_filename,
-                        "stored_filename": stored_filename,
-                        "title": title,
-                        "project_name": project_name or "Not specified",
-                        "date_added": date.today().isoformat(),
-                        "uploaded_by": session["user"],
-                    }
-                )
-                os.makedirs(app.instance_path, exist_ok=True)
-                with open(PHOTO_METADATA_FILE, "w", encoding="utf-8") as metadata_file:
-                    json.dump(photos, metadata_file, indent=2)
-
-                return redirect(url_for("photos"))
-
-    return render_template("upload_photo.html", user_name=session["user"], error=error)
+    return render_template(
+        "upload_photo.html",
+        user_name=session["user"],
+        projects=projects,
+        selected_project=request.form.get("project_id") or request.args.get("project", ""),
+        error=error,
+    )
 
 
-@app.route("/photos/<photo_id>/image")
+@app.route("/photos/<int:photo_id>/image")
 @role_required("employee", "subcontractor")
 def photo_image(photo_id):
-    if not os.path.exists(PHOTO_METADATA_FILE):
+    photo = database.get_visible_file("photos", photo_id, session["user_id"], session["role"])
+    if photo is None or not photo["file_path"]:
         return "Photo not found.", 404
+    return send_from_directory(PHOTO_UPLOAD_FOLDER, photo["file_path"])
 
-    with open(PHOTO_METADATA_FILE, encoding="utf-8") as metadata_file:
-        photos = json.load(metadata_file)
 
-    photo = next((item for item in photos if item["id"] == photo_id), None)
-    if photo is None:
-        return "Photo not found.", 404
+@app.route("/photos/<int:photo_id>/delete", methods=["POST"])
+@role_required("employee")
+def delete_photo(photo_id):
+    _remove_file(PHOTO_UPLOAD_FOLDER, database.delete_file_record("photos", photo_id))
+    return redirect(request.referrer if (request.referrer or "").startswith(request.host_url) else url_for("photos"))
 
-    return send_from_directory(PHOTO_UPLOAD_FOLDER, photo["stored_filename"])
 
 if __name__ == "__main__":
     app.run(debug=os.environ.get("FLASK_DEBUG", "").lower() == "true")

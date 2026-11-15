@@ -8,6 +8,8 @@
   // These employee pages (and Clients/Subcontractors) use the database (server-rendered), so the browser demo layer leaves them alone.
   if (role === 'employee' && (['/dashboard', '/projects', '/new-project', '/estimates', '/invoices', '/job-costs', '/schedule'].includes(path)
       || /^\/(clients|subcontractors)(\/|$)/.test(path))) return;
+  // Documents and Photos are stored on the server for employees and subcontractors (step 7).
+  if ((role === 'employee' || role === 'subcontractor') && /^\/(documents|photos)(\/|$)/.test(path)) return;
   const main = document.querySelector('main.content');
   if (!main) return;
   const banner = document.createElement('p'); banner.className = 'demo-banner';
