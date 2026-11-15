@@ -163,12 +163,15 @@ CREATE TABLE IF NOT EXISTS subcontractor_invoices (
     assignment_id   INTEGER NOT NULL REFERENCES project_assignments(assignment_id) ON DELETE CASCADE,
     category_id     INTEGER REFERENCES cost_categories(category_id),
     reviewed_by     INTEGER REFERENCES users(id) ON DELETE SET NULL,
-    invoice_number  TEXT,
+    invoice_number  TEXT NOT NULL,
+    description     TEXT,
     amount          DECIMAL(12,2) NOT NULL CHECK (amount >= 0),
     status          TEXT NOT NULL DEFAULT 'Pending Approval'
                     CHECK (status IN ('Pending Approval', 'Approved', 'Rejected', 'Paid')),
     submitted_at    TEXT NOT NULL DEFAULT (datetime('now')),
-    file_path       TEXT
+    reviewed_at     TEXT,
+    original_filename TEXT,
+    file_path       TEXT   -- stored in instance/subcontractor_invoice_uploads
 );
 
 -- ---------- Scheduling (RTM A11) ----------

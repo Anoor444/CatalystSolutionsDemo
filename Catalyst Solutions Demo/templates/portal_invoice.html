@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Invoice {{ invoice.invoice_number }} | Buff Bison Construction</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <style>
+        .portal-notice { background: #e3f1e6; color: #2b6a3a; border: 1px solid #b7dcc0; padding: 10px 14px; border-radius: 4px; margin-bottom: 16px; }
+        .overdue-date { color: #8a2b2b; font-weight: bold; }
+        .inline-form { display: inline-flex; gap: 6px; align-items: center; margin: 0; }
+        .inline-form select { padding: 6px 8px; border: 1px solid var(--border); border-radius: 4px; font-family: inherit; }
+        .portal-actions-cell { display: flex; gap: 6px; flex-wrap: wrap; }
+        .line-items { margin-top: 8px; font-size: 13px; }
+        .line-items td, .line-items th { padding: 6px 8px; }
+        details summary { cursor: pointer; color: var(--copper); font-weight: bold; }
+        .section-stack { display: flex; flex-direction: column; gap: 24px; }
+    </style>
+    <style>
+        .invoice-sheet { max-width: 860px; }
+        .invoice-top { display: flex; justify-content: space-between; gap: 24px; border-bottom: 3px solid var(--copper); padding-bottom: 16px; margin-bottom: 20px; }
+        .invoice-logo { width: 110px; height: auto; }
+        .invoice-title { text-align: right; }
+        .invoice-title h2 { letter-spacing: 2px; color: var(--navy); }
+        .invoice-meta { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 20px; }
+        .invoice-meta small { display: block; font-size: 11px; font-weight: bold; text-transform: uppercase; color: var(--muted); }
+        .invoice-actions { max-width: 860px; display: flex; justify-content: flex-end; margin-top: 16px; }
+        .invoice-total { text-align: right; font-size: 18px; margin: 16px 0; }
+        @media (max-width: 700px) { .invoice-meta { grid-template-columns: repeat(2, 1fr); } }
+        @media print { .sidebar, .header, .no-print { display: none !important; } .card { border: none; box-shadow: none; } body { background: #fff; } }
+    </style>
+</head>
+<body>
+<div class="app">
+    {% include '_sidebar.html' %}
+
+    <div class="main">
+        <header class="header">
+            <div>
+                <h1>Invoice {{ invoice.invoice_number }}</h1>
+                <p class="welcome">{{ invoice.project_name }}</p>
+            </div>
+            <div class="header-right">
+                <div class="profile">
+                    <span class="avatar">{{ user_name[0] }}</span>
+                    <span class="profile-name">{{ user_name }}</span>
+                </div>
+            </div>
+        </header>
+
+                <main class="content">
+            <a href="{{ url_for('client_invoices') }}" class="back-link no-print">&larr; Back to Invoices</a>
+            <section class="card invoice-sheet">
+                <div class="invoice-top">
+                    <div>
+                        <img src="{{ url_for('static', filename='css/logo.png') }}" alt="Buff Bison Construction" class="invoice-logo">
+                        <p><strong>Buff Bison Construction</strong></p>
+                    </div>
+                    <div class="invoice-title">
+                        <h2>INVOICE</h2>
+                        <p>{{ invoice.invoice_number }}</p>
+                        {% if invoice.status == 'Paid' %}<span class="status completed">PAID</span>{% elif overdue %}<span class="status hold">OVERDUE</span>{% endif %}
+                    </div>
+                </div>
+                <div class="invoice-meta">
+                    <div><small>Bill To</small>{{ invoice.client_name }}</div>
+                    <div><small>Project</small>{{ invoice.project_name }}</div>
+                    <div><small>Issue Date</small>{{ invoice.issue_date|short_date }}</div>
+                    <div><small>{{ 'Paid On' if invoice.status == 'Paid' else 'Due Date' }}</small>{{ (invoice.paid_at if invoice.status == 'Paid' else invoice.due_date)|short_date }}</div>
+                </div>
+                <div class="table-wrap">
+                    <table>
+                        <thead><tr><th>Description</th><th>Qty</th><th>Unit Price</th><th>Amount</th></tr></thead>
+                        <tbody>
+                            {% for li in invoice.line_items %}
+                            <tr><td>{{ li.description }}</td><td>{{ li.quantity|round(2) }}</td><td>{{ "$" ~ "{:,.2f}".format(li.unit_price|float) }}</td><td>{{ "$" ~ "{:,.2f}".format(li.line_total|float) }}</td></tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                <p class="invoice-total">{{ 'Total Paid' if invoice.status == 'Paid' else 'Amount Due' }}: <strong>{{ "$" ~ "{:,.2f}".format(invoice.total_amount|float) }}</strong></p>
+                <p class="welcome">Thank you for your business.</p>
+            </section>
+            <div class="form-actions no-print invoice-actions"><button type="button" class="btn" onclick="window.print()">Print / Save as PDF</button></div>
+        </main>
+    </div>
+</div>
+</body>
+</html>

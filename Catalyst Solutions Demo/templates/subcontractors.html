@@ -5,6 +5,12 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Subcontractors | Buff Bison Construction</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <style>
+        .portal-notice { background: #e3f1e6; color: #2b6a3a; border: 1px solid #b7dcc0; padding: 10px 14px; border-radius: 4px; margin: 24px 0 0; }
+        #sub-invoices { margin-top: 24px; }
+        .sub-invoice-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+        .sub-invoice-actions form { margin: 0; }
+    </style>
 </head>
 <body>
 <div class="app">
@@ -81,6 +87,43 @@
                 </div>
             </section>
 
+            {% for message in get_flashed_messages(category_filter=['message']) %}
+            <p class="portal-notice" role="status">{{ message }}</p>
+            {% endfor %}
+            <section class="card" id="sub-invoices">
+                <div class="table-toolbar"><h2>Subcontractor Invoices</h2></div>
+                <p class="welcome">Approved and paid invoices count toward each project's actual cost (Projects and Job Costs).</p>
+                <div class="table-wrap">
+                    <table>
+                        <thead><tr><th>Invoice</th><th>Subcontractor</th><th>Project</th><th>Submitted</th><th>Amount</th><th>Status</th><th>Actions</th></tr></thead>
+                        <tbody>
+                            {% for i in sub_invoices %}
+                            <tr>
+                                <td>{% if i.file_path %}<a class="text-link" href="{{ url_for('subcontractor_invoice_file', sub_invoice_id=i.id) }}" target="_blank" rel="noopener">{{ i.invoice_number }}</a>{% else %}{{ i.invoice_number }}{% endif %}
+                                    {% if i.description %}<br><small class="muted">{{ i.description }}</small>{% endif %}</td>
+                                <td>{{ i.company_name }}</td>
+                                <td>{{ i.project_name }}</td>
+                                <td>{{ i.submitted_date|short_date }}</td>
+                                <td>{{ i.amount|currency }}</td>
+                                <td><span class="status {{ {'Pending Approval': 'progress', 'Approved': 'completed', 'Paid': 'completed', 'Rejected': 'hold'}[i.status] }}">{{ i.status }}</span></td>
+                                <td>
+                                    <div class="sub-invoice-actions">
+                                    {% for next_status in transitions[i.status] %}
+                                    <form method="POST" action="{{ url_for('review_subcontractor_invoice', sub_invoice_id=i.id) }}">
+                                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                        <button type="submit" name="status" value="{{ next_status }}" class="{{ 'btn' if next_status in ('Approved', 'Paid') and i.status != 'Paid' else 'btn-outline' }}">{{ {'Approved': 'Approve' if i.status == 'Pending Approval' else 'Undo paid', 'Rejected': 'Reject', 'Paid': 'Mark Paid', 'Pending Approval': 'Reopen'}[next_status] }}</button>
+                                    </form>
+                                    {% endfor %}
+                                    </div>
+                                </td>
+                            </tr>
+                            {% else %}
+                            <tr class="empty-row"><td colspan="7">No subcontractor invoices yet.</td></tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </section>
         </main>
     </div>
 </div>

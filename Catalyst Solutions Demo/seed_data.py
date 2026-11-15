@@ -101,6 +101,7 @@ def load_sample_data(connection):
     load_cost_samples(connection)
     load_directory_samples(connection)
     load_file_samples(connection)
+    load_subcontractor_invoice_samples(connection)
 
 
 # ---------------------------------------------------------------------
@@ -487,3 +488,37 @@ def import_legacy_file_lists(connection, instance_folder):
             if isinstance(item, dict) and item.get("stored_filename"):
                 insert(item)
         os.replace(path, path + ".imported")
+
+
+# ---------------------------------------------------------------------
+# Sample subcontractor invoices (backend step 8)
+# ---------------------------------------------------------------------
+# Pending ones don't count toward project costs until an employee approves them,
+# so the sample "costs to date" stay the same.
+# (subcontractor email, project, invoice number, description, amount, status, submitted)
+SUBCONTRACTOR_INVOICES = (
+    ("demo.subcontractor@buffbison.com", "Riverstone Kitchen Remodel", "DS-1001",
+     "Cabinet install labor, week 1", 2400, "Pending Approval", "2026-11-10 10:00:00"),
+    ("demo.subcontractor@buffbison.com", "Memorial Bathroom Renovation", "DS-1002",
+     "Demolition prep and haul-off", 850, "Pending Approval", "2026-11-12 15:30:00"),
+    ("demo.subcontractor@buffbison.com", "Sugar Land Roof Replacement", "DS-0998",
+     "Duplicate of DS-0997", 1200, "Rejected", "2026-10-30 09:00:00"),
+)
+
+
+def load_subcontractor_invoice_samples(connection):
+    category = connection.execute("SELECT category_id FROM cost_categories WHERE name = 'Subcontractor'").fetchone()
+    for email, project, number, description, amount, status, submitted in SUBCONTRACTOR_INVOICES:
+        assignment = connection.execute(
+            """SELECT pa.assignment_id FROM project_assignments pa
+               JOIN subcontractors s ON s.subcontractor_id = pa.subcontractor_id
+               JOIN projects p ON p.project_id = pa.project_id
+               WHERE lower(s.email) = lower(?) AND p.name = ?""", (email, project)).fetchone()
+        if assignment:
+            connection.execute(
+                """INSERT INTO subcontractor_invoices (assignment_id, category_id, invoice_number, description,
+                                                      amount, status, submitted_at, reviewed_at)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+                (assignment[0], category[0] if category else None, number, description, amount, status, submitted,
+                 None if status == "Pending Approval" else submitted),
+            )

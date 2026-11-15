@@ -56,7 +56,9 @@ The client demo account is linked to the client **Sarah Johnson** (Riverstone Ki
 - [x] Invoices: create, edit, send, mark paid or unpaid, delete drafts, PDF
 - [x] Job Costs: expenses, budget by category and receipt uploads (PDF/JPG/PNG, 10 MB) in the database
 - [x] Clients and Subcontractors: list, add, edit (status Active/Inactive instead of delete); subcontractors are assigned to projects from their form (`project_assignments`). A client or subcontractor record is linked to a login automatically when the emails match (used by the portals).
-- [ ] Client and subcontractor portals (still use the sample lists in `app.py`)
+- [x] Client portal: dashboard, My Projects, project page (progress, schedule, invoices), Estimates (approve or decline sent estimates) and Invoices (printable invoice page) — all from the database, only for the client linked to the login
+- [x] Subcontractor portal: dashboard, assigned projects only, task status updates, submit invoices (optional PDF/JPG/PNG in `instance/subcontractor_invoice_uploads`), Documents and Photos links
+- [x] Subcontractor invoice approval: employees approve, reject, mark paid or reopen on the Subcontractors page (`#sub-invoices`). Approved and paid invoices count as project cost and show on Job Costs as read-only rows (`id` like `sub-3`).
 - [x] Documents and Photos: records in the database (files in `instance/document_uploads` and `instance/photo_uploads`), real project dropdowns, delete for employees, `?project=<id>` filter. Subcontractors only see their assigned projects (plus their own uploads). Old `documents.json`/`photos.json` lists are imported once.
 
 ## JSON API (api.py)
@@ -95,3 +97,7 @@ The SQL is plain and portable. The main changes would be:
 ## Who can see what
 
 `database.accessible_project_ids(user_id, role)` returns `None` for employees (all projects), or the set of project ids a subcontractor is assigned to / a client owns. Use it for any page a non-employee can open.
+
+Portal pages call `database.portal_projects` / `database.portal_project` (and the `client_*` / `subcontractor_*` helpers), which check the login on the server — opening another client's project or invoice by URL returns 404. `portal.js` (the browser demo layer) is turned off for the client and subcontractor roles.
+
+Subcontractor invoice status flow (`SUB_INVOICE_TRANSITIONS`): Pending Approval → Approved or Rejected; Approved → Paid (or back to Pending); Rejected → Pending; Paid → Approved.

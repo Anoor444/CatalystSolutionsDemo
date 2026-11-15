@@ -3,8 +3,22 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{{ assignment.project }} | Buff Bison Construction</title>
+    <title>{{ project.name }} | Buff Bison Construction</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <style>
+        .portal-notice { background: #e3f1e6; color: #2b6a3a; border: 1px solid #b7dcc0; padding: 10px 14px; border-radius: 4px; margin-bottom: 16px; }
+        .overdue-date { color: #8a2b2b; font-weight: bold; }
+        .inline-form { display: inline-flex; gap: 6px; align-items: center; margin: 0; }
+        .inline-form select { padding: 6px 8px; border: 1px solid var(--border); border-radius: 4px; font-family: inherit; }
+        .portal-actions-cell { display: flex; gap: 6px; flex-wrap: wrap; }
+        .visually-hidden { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+        .file-links { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+        .file-links a { display: inline-flex; align-items: center; justify-content: center; min-height: 40px; padding: 0 18px; box-sizing: border-box; text-decoration: none; }
+        .line-items { margin-top: 8px; font-size: 13px; }
+        .line-items td, .line-items th { padding: 6px 8px; }
+        details summary { cursor: pointer; color: var(--copper); font-weight: bold; }
+        .section-stack { display: flex; flex-direction: column; gap: 24px; }
+    </style>
 </head>
 <body>
 <div class="app">
@@ -13,8 +27,8 @@
     <div class="main">
         <header class="header">
             <div>
-                <h1>{{ assignment.project }}</h1>
-                <p class="welcome">{% if current_role == 'subcontractor' %}Assigned project details{% else %}{{ client_project_name }} &middot; Project assignment{% endif %}</p>
+                <h1>{{ project.name }}</h1>
+                <p class="welcome">{% if current_role == 'subcontractor' %}Assigned project{% else %}Your project with Buff Bison{% endif %}</p>
             </div>
             <div class="header-right">
                 <div class="profile">
@@ -23,27 +37,109 @@
                 </div>
             </div>
         </header>
-        <main class="content">
-            <a href="{{ url_for('projects') if current_role == 'subcontractor' else url_for('client_my_projects') }}" class="back-link">&larr; Back to {{ 'My Projects' if current_role == 'subcontractor' else 'Project Assignments' }}</a>
+                <main class="content">
+            <a href="{{ url_for('projects') if current_role == 'subcontractor' else url_for('client_my_projects') }}" class="back-link">&larr; Back to {{ 'My Assigned Projects' if current_role == 'subcontractor' else 'My Projects' }}</a>
+            {% for message in get_flashed_messages(category_filter=['message']) %}
+            <p class="portal-notice" role="status">{{ message }}</p>
+            {% endfor %}
             <section class="card project-meta">
-                <div class="meta-item">
-                    <small>Project</small>
-                    {{ assignment.project if current_role == 'subcontractor' else client_project_name }}
-                </div>
-                <div class="meta-item">
-                    <small>Assignment Status</small>
-                    <span class="status {{ 'planning' if assignment.status == 'Planning' else 'progress' }}">{{ assignment.status }}</span>
-                </div>
-                <div class="meta-item">
-                    <small>Target Date</small>
-                    {{ assignment.due_date }}
-                </div>
+                <div class="meta-item"><small>Status</small><span class="status {{ project.status|status_class }}">{{ project.status }}</span></div>
+                <div class="meta-item"><small>Project Manager</small>{{ project.manager_name or '—' }}</div>
+                <div class="meta-item"><small>Start</small>{{ project.start_date|short_date }}</div>
+                <div class="meta-item"><small>Due</small>{{ project.due_date|short_date }}</div>
+                {% if project.address %}<div class="meta-item"><small>Address</small>{{ project.address }}</div>{% endif %}
             </section>
+            <div class="section-stack">
             <section class="card summary">
-                <p class="summary-label">Assignment Progress</p>
-                <p class="summary-value">{{ assignment.progress }}%</p>
-                <div class="bar bar-wide"><div class="bar-fill" style="width: {{ assignment.progress }}%;"></div></div>
+                <p class="summary-label">Project Progress</p>
+                <p class="summary-value">{{ project.progress_percent }}%</p>
+                <div class="bar bar-wide"><div class="bar-fill" style="width: {{ project.progress_percent }}%;"></div></div>
             </section>
+
+            <section class="card">
+                <h2>Schedule</h2>
+                <div class="table-wrap">
+                    <table>
+                        <thead><tr><th>Task</th><th>Assigned To</th><th>Due</th><th>Status</th></tr></thead>
+                        <tbody>
+                            {% for task in tasks %}
+                            <tr>
+                                <td>{{ task.name }}{% if task.description %}<br><small class="muted">{{ task.description }}</small>{% endif %}</td>
+                                <td>{{ task.assigned_to or '—' }}</td>
+                                <td{% if task.overdue %} class="overdue-date"{% endif %}>{{ task.due_date|short_date }}</td>
+                                <td>
+                                    {% if current_role == 'subcontractor' %}
+                                    <form method="POST" action="{{ url_for('subcontractor_task_status', project_id=project.project_id, task_id=task.id) }}" class="inline-form">
+                                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                        <label class="visually-hidden" for="task-{{ task.id }}">Status for {{ task.name }}</label>
+                                        <select id="task-{{ task.id }}" name="status">
+                                            {% for status in task_statuses %}<option {% if status == task.status %}selected{% endif %}>{{ status }}</option>{% endfor %}
+                                        </select>
+                                        <button type="submit" class="btn-outline">Save</button>
+                                    </form>
+                                    {% else %}
+                                    <span class="status {{ {'Completed': 'completed', 'In Progress': 'progress'}.get(task.status, 'planning') }}">{{ task.status }}</span>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            {% else %}
+                            <tr class="empty-row"><td colspan="4">No tasks scheduled yet.</td></tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+
+            {% if current_role == 'client' %}
+            <section class="card">
+                <h2>Invoices</h2>
+                <div class="table-wrap">
+                    <table>
+                        <thead><tr><th>Invoice</th><th>Issued</th><th>Due</th><th>Amount</th><th>Status</th><th></th></tr></thead>
+                        <tbody>
+                            {% for i in invoices %}
+                            <tr>
+                                <td>{{ i.invoice_number }}</td><td>{{ i.issue_date|short_date }}</td>
+                                <td{% if i.overdue %} class="overdue-date"{% endif %}>{{ i.due_date|short_date }}</td>
+                                <td>{{ i.total_amount|currency }}</td>
+                                <td>{% if i.status == 'Paid' %}<span class="status completed">Paid</span>{% elif i.overdue %}<span class="status hold">Overdue</span>{% else %}<span class="status progress">Unpaid</span>{% endif %}</td>
+                                <td><a class="btn-outline" href="{{ url_for('client_invoice', invoice_id=i.invoice_id) }}">View</a></td>
+                            </tr>
+                            {% else %}
+                            <tr class="empty-row"><td colspan="6">No invoices for this project yet.</td></tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+            {% else %}
+            <section class="card">
+                <h2>Files</h2>
+                <p class="welcome">Documents and progress photos for this project.</p>
+                <div class="file-links">
+                    <a class="btn-outline" href="{{ url_for('documents', project=project.project_id) }}">Documents</a>
+                    <a class="btn-outline" href="{{ url_for('photos', project=project.project_id) }}">Photos</a>
+                    <a class="btn" href="{{ url_for('upload_photo', project=project.project_id) }}">Upload Photo</a>
+                </div>
+            </section>
+            <section class="card">
+                <h2>My Invoices for This Project</h2>
+                <div class="table-wrap">
+                    <table>
+                        <thead><tr><th>Invoice</th><th>Submitted</th><th>Amount</th><th>Status</th></tr></thead>
+                        <tbody>
+                            {% for i in invoices %}
+                            <tr><td>{{ i.invoice_number }}</td><td>{{ i.submitted_date|short_date }}</td><td>{{ i.amount|currency }}</td>
+                                <td><span class="status {{ {'Pending Approval': 'progress', 'Approved': 'completed', 'Paid': 'completed', 'Rejected': 'hold'}[i.status] }}">{{ i.status }}</span></td></tr>
+                            {% else %}
+                            <tr class="empty-row"><td colspan="4">No invoices yet. <a class="text-link" href="{{ url_for('subcontractor_invoices') }}">Submit one</a>.</td></tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+            {% endif %}
+            </div>
         </main>
     </div>
 </div>

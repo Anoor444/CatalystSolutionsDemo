@@ -4,6 +4,8 @@
   const D = window.Demo, E = D.esc, M = D.money;
   const role = window.portalContext.role, path = location.pathname;
   if (path === '/settings' || path === '/settings/change-password') return;
+  // Client and subcontractor portals read and write the database (step 8), so the browser demo layer stays off.
+  if (role === 'client' || role === 'subcontractor') return;
   // Preserve the original employee screens and their existing demo behavior.
   // These employee pages (and Clients/Subcontractors) use the database (server-rendered), so the browser demo layer leaves them alone.
   if (role === 'employee' && (['/dashboard', '/projects', '/new-project', '/estimates', '/invoices', '/job-costs', '/schedule'].includes(path)

@@ -5,6 +5,17 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Subcontractor Dashboard | Buff Bison Construction</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <style>
+        .portal-notice { background: #e3f1e6; color: #2b6a3a; border: 1px solid #b7dcc0; padding: 10px 14px; border-radius: 4px; margin-bottom: 16px; }
+        .overdue-date { color: #8a2b2b; font-weight: bold; }
+        .inline-form { display: inline-flex; gap: 6px; align-items: center; margin: 0; }
+        .inline-form select { padding: 6px 8px; border: 1px solid var(--border); border-radius: 4px; font-family: inherit; }
+        .portal-actions-cell { display: flex; gap: 6px; flex-wrap: wrap; }
+        .line-items { margin-top: 8px; font-size: 13px; }
+        .line-items td, .line-items th { padding: 6px 8px; }
+        details summary { cursor: pointer; color: var(--copper); font-weight: bold; }
+        .section-stack { display: flex; flex-direction: column; gap: 24px; }
+    </style>
 </head>
 <body>
 <div class="app">
@@ -25,80 +36,77 @@
             </div>
         </header>
 
-        <main class="content">
+                <main class="content">
+            {% for message in get_flashed_messages(category_filter=['message']) %}
+            <p class="portal-notice" role="status">{{ message }}</p>
+            {% endfor %}
+            {% if not linked %}
+            <section class="card"><p class="placeholder">Your login isn't linked to a {{ 'client' if current_role == 'client' else 'subcontractor' }} record yet. Please contact Buff Bison so we can connect your account.</p></section>
+            {% endif %}
+            {% if linked %}
             <section class="card client-dashboard-intro">
-                <p>View your assigned projects, share progress photos, and check invoice status.</p>
+                <p>View your assigned projects, update your tasks, share progress photos, and submit invoices.</p>
                 <a href="{{ url_for('projects') }}" class="btn">View Assigned Projects</a>
             </section>
-
             <section class="cards">
                 <a href="{{ url_for('projects') }}" class="card summary">
                     <p class="summary-label">Assigned Projects</p>
                     <p class="summary-value">{{ projects|length }}</p>
                 </a>
                 <a href="{{ url_for('projects') }}" class="card summary">
-                    <p class="summary-label">Projects In Progress</p>
-                    <p class="summary-value">{{ projects|selectattr('status', 'equalto', 'In Progress')|list|length }}</p>
+                    <p class="summary-label">Open Tasks</p>
+                    <p class="summary-value">{{ tasks|length }}</p>
                 </a>
                 <a href="{{ url_for('subcontractor_invoices') }}" class="card summary">
-                    <p class="summary-label">Open Invoices</p>
-                    <p class="summary-value">{{ open_invoices|length }}</p>
+                    <p class="summary-label">Invoices Awaiting Approval</p>
+                    <p class="summary-value">{{ pending_invoices|length }}</p>
                 </a>
             </section>
-
             <div class="grid">
                 <section class="card">
                     <h2>Project Progress</h2>
                     <div class="table-wrap">
                         <table>
-                            <thead>
-                                <tr>
-                                    <th>Project</th>
-                                    <th>Status</th>
-                                    <th>Progress</th>
-                                    <th>Target Date</th>
-                                </tr>
-                            </thead>
+                            <thead><tr><th>Project</th><th>Status</th><th>Progress</th><th>Due Date</th></tr></thead>
                             <tbody>
                                 {% for project in projects %}
                                 <tr>
-                                    <td>{{ project.project }}</td>
-                                    <td><span class="status {% if project.status == 'Planning' %}planning{% else %}progress{% endif %}">{{ project.status }}</span></td>
-                                    <td>
-                                        <div class="bar"><div class="bar-fill" style="width: {{ project.progress }}%;"></div></div>
-                                        <span class="pct">{{ project.progress }}%</span>
-                                    </td>
-                                    <td>{{ project.due_date }}</td>
+                                    <td><a class="project-name-link" href="{{ url_for('project_details', project_id=project.project_id) }}">{{ project.name }}</a></td>
+                                    <td><span class="status {{ project.status|status_class }}">{{ project.status }}</span></td>
+                                    <td><div class="bar"><div class="bar-fill" style="width: {{ project.progress_percent }}%;"></div></div><span class="pct">{{ project.progress_percent }}%</span></td>
+                                    <td>{{ project.due_date|short_date }}</td>
+                                    
                                 </tr>
                                 {% else %}
-                                <tr><td colspan="4">No projects are available.</td></tr>
+                                <tr class="empty-row"><td colspan="4">No projects yet.</td></tr>
                                 {% endfor %}
                             </tbody>
                         </table>
                     </div>
                 </section>
-
                 <section class="card">
-                    <h2>Needs Your Attention</h2>
+                    <h2>Upcoming Tasks</h2>
                     <ul class="task-list">
+                        {% for task in tasks[:6] %}
+                        <li>
+                            <p class="task-name">{{ task.name }}</p>
+                            <p class="task-meta">{{ task.project_name }} &middot;
+                                {% if task.overdue %}<span class="overdue-date">Overdue: {{ task.due_date|short_date }}</span>{% else %}{{ task.due_date|short_date }}{% endif %}
+                                &middot; {{ task.status }}</p>
+                            <a href="{{ url_for('project_details', project_id=task.project_id) }}" class="btn-outline">Update</a>
+                        </li>
+                        {% else %}
+                        <li><p class="task-meta">No open tasks on your projects.</p></li>
+                        {% endfor %}
                         <li>
                             <p class="task-name">Progress Photos</p>
                             <p class="task-meta">Share the latest progress on your assigned projects.</p>
                             <a href="{{ url_for('upload_photo') }}" class="btn-outline">Upload photos</a>
                         </li>
-                        {% for invoice in open_invoices %}
-                        <li>
-                            <p class="task-name">{{ invoice.invoice }}</p>
-                            <p class="task-meta">{{ invoice.project }} - {{ invoice.amount }} - {{ invoice.status }}</p>
-                            <a href="{{ url_for('subcontractor_invoices') }}" class="btn-outline">View invoices</a>
-                        </li>
-                        {% endfor %}
-                        {% if not open_invoices %}
-                        <li><p class="task-meta">You have no invoices to review.</p></li>
-                        {% endif %}
                     </ul>
                 </section>
             </div>
+            {% endif %}
         </main>
     </div>
 </div>
