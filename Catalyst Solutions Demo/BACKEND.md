@@ -28,6 +28,32 @@ python -m flask --app app create-user      # add a login account
 
 To start completely fresh, stop the app, delete the `instance` folder and run `python app.py`. Note that this also deletes uploaded documents and photos.
 
+## Running the tests
+
+From the `Catalyst Solutions Demo` folder:
+
+```bash
+python -m unittest discover -s tests -v
+```
+
+About 70 tests, roughly 30 seconds. They run the app against a **temporary** database and upload folder, so your real data in `instance/` is never touched, and every test starts from fresh sample data. `pytest tests` works too if you have pytest installed.
+
+| File | Covers |
+|---|---|
+| `tests/test_estimates_invoices.py` | Estimates and invoices API: validation, status rules, convert to project, CSRF |
+| `tests/test_schedule_job_costs.py` | Tasks API; job costs, expenses and receipt uploads |
+| `tests/test_directory.py` | Clients and subcontractors pages, project assignments |
+| `tests/test_documents_photos.py` | Document and photo uploads, downloads, who can see what |
+| `tests/test_portals.py` | Client and subcontractor portals, subcontractor invoice approval |
+| `tests/test_project_page.py` | Employee project page tabs, Edit Project |
+| `tests/test_search.py` | Search, demo client estimate |
+| `tests/test_password_change.py` | Changing passwords (all roles) |
+| `tests/support.py` | Shared setup (temporary database, logins, helpers) — not a test file |
+
+`flask --app app reset-demo-data` and the tests use the same `database.reset_business_data()`.
+
+Note: `tests/frontend_smoke.mjs` was written for the earlier browser-only demo (it checks browser-storage features that the database versions replaced), so it no longer passes as-is.
+
 ## Demo logins
 
 | Role | Email | Password |
