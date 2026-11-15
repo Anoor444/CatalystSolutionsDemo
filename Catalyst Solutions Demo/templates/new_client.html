@@ -15,7 +15,7 @@
     <div class="main">
         <header class="header">
             <div>
-                <h1>Add New Client</h1>
+                <h1>{{ 'Edit Client' if existing else 'Add New Client' }}</h1>
                 <p class="welcome">Enter contact and billing information for a client.</p>
             </div>
             <div class="header-right">
@@ -27,30 +27,36 @@
         </header>
 
         <main class="content">
-            <form method="POST" action="{{ url_for('new_client') }}" class="form-page">
+            <form method="POST" action="{{ url_for('new_client', client_id=existing.client_id) if existing else url_for('new_client') }}" class="form-page">
                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+                {% if errors %}
+                <div class="login-error" role="alert">
+                    {% for error in errors %}<div>{{ error }}</div>{% endfor %}
+                </div>
+                {% endif %}
                 <section class="card form-section">
                     <h2>Contact Information</h2>
                     <div class="form-grid">
                         <div class="form-field">
                             <label for="client_name">Client Name <span class="required">*</span></label>
-                            <input type="text" id="client_name" name="client_name" autocomplete="name" required>
+                            <input type="text" id="client_name" name="client_name" value="{{ values.get('client_name') or '' }}" autocomplete="name" required>
                         </div>
                         <div class="form-field">
                             <label for="company">Company (optional)</label>
-                            <input type="text" id="company" name="company" autocomplete="organization">
+                            <input type="text" id="company" name="company" value="{{ values.get('company') or '' }}" autocomplete="organization">
                         </div>
                         <div class="form-field">
                             <label for="email">Email Address</label>
-                            <input type="email" id="email" name="email" autocomplete="email">
+                            <input type="email" id="email" name="email" value="{{ values.get('email') or '' }}" autocomplete="email">
                         </div>
                         <div class="form-field">
                             <label for="phone">Phone Number</label>
-                            <input type="tel" id="phone" name="phone" autocomplete="tel">
+                            <input type="tel" id="phone" name="phone" value="{{ values.get('phone') or '' }}" autocomplete="tel">
                         </div>
                         <div class="form-field full">
                             <label for="address">Address</label>
-                            <input type="text" id="address" name="address" autocomplete="street-address">
+                            <input type="text" id="address" name="address" value="{{ values.get('address') or '' }}" autocomplete="street-address">
                         </div>
                     </div>
                 </section>
@@ -61,18 +67,17 @@
                         <div class="form-field">
                             <label for="status">Status</label>
                             <select id="status" name="status">
-                                <option selected>Active</option>
-                                <option>Inactive</option>
+                                {% for status in ['Active', 'Inactive'] %}
+                                <option {% if (values.get('status') or 'Active') == status %}selected{% endif %}>{{ status }}</option>
+                                {% endfor %}
                             </select>
                         </div>
                         <div class="form-field full">
                             <label for="notes">Notes (optional)</label>
-                            <textarea id="notes" name="notes"></textarea>
+                            <textarea id="notes" name="notes">{{ values.get('notes') or '' }}</textarea>
                         </div>
                     </div>
                 </section>
-
-                <p class="welcome">Client submissions are not saved yet; database storage has not been connected.</p>
 
                 <div class="form-actions">
                     <a href="{{ url_for('clients') }}" class="btn-outline">Cancel</a>
