@@ -23,7 +23,11 @@
                 <p class="welcome">Welcome back, {{ user_name }}</p>
             </div>
             <div class="header-right">
-                <input type="search" class="search" placeholder="Search projects, clients, invoices...">
+                {% if current_role == 'employee' %}
+                <form method="GET" action="{{ url_for('search') }}" role="search" class="header-search">
+                    <input type="search" class="search" name="q" placeholder="Search projects, clients, invoices..." aria-label="Search projects, clients, invoices, estimates and subcontractors">
+                </form>
+                {% endif %}
                 {% if current_role == 'employee' %}<a href="{{ url_for('new_project') }}" class="btn">+ New Project</a>{% endif %}
                 <div class="profile">
                     <span class="avatar">{{ user_name[0] }}</span>

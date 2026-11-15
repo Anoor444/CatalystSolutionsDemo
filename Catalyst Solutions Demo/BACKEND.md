@@ -53,7 +53,9 @@ The client demo account is linked to the client **Sarah Johnson** (Riverstone Ki
 - [x] Schedule: tasks are stored in the database (add, edit, complete, delete); project pages show the same tasks
 - [x] Project details page (employee): overview, Costs (budget vs actual by category + expenses), Invoices, Documents, Photos, Schedule and Subcontractors (assignments + invoice approval) tabs, all server-rendered from the database. `?tab=<name>` opens a tab; uploads started from a tab (`?project=<id>&from=project`) and approvals return to it.
 - [x] Edit Project (`/project/<id>/edit`): reuses the New Project form; client stays fixed (Clients page), progress can be set, address optional for older projects
-- [x] Invoices page links: `/invoices?new=1&project=<id>` opens a new invoice for that project, `/invoices?open=<id>` opens one invoice
+- [x] Invoices page links: `/invoices?new=1&project=<id>` opens a new invoice for that project, `/invoices?open=<id>` opens one invoice (Estimates page: `/estimates?open=<id>`)
+- [x] Search (employee): the Dashboard search box goes to `/search?q=...`, which finds projects (name, number, client, address), clients (name, company, email, phone), invoices, estimates and subcontractors (company, contact, trade, email). Case-insensitive; `%` and `_` are matched literally.
+- [x] Demo client sample estimate: "Riverstone Backsplash and Lighting Upgrade" is added once in Sent status for Sarah Johnson (next free estimate number), so the client portal has something to approve or decline
 - [x] Estimates: create, edit, send, approve or reject, delete drafts, convert to a project
 - [x] Invoices: create, edit, send, mark paid or unpaid, delete drafts, PDF
 - [x] Job Costs: expenses, budget by category and receipt uploads (PDF/JPG/PNG, 10 MB) in the database

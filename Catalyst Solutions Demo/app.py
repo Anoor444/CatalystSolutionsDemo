@@ -709,6 +709,20 @@ def edit_project(project_id):
     )
 
 
+@app.route("/search")
+@role_required("employee")
+def search():
+    text = request.args.get("q", "").strip()[:100]
+    results = database.search_everything(text) if text else None
+    return render_template(
+        "search.html",
+        user_name=session["user"],
+        query=text,
+        results=results,
+        total=sum(len(rows) for rows in results.values()) if results else 0,
+    )
+
+
 @app.route("/logout", methods=["POST"])
 @role_required(*ROLES)
 def logout():

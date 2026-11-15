@@ -102,6 +102,45 @@ def load_sample_data(connection):
     load_directory_samples(connection)
     load_file_samples(connection)
     load_subcontractor_invoice_samples(connection)
+    load_demo_client_estimate(connection)
+
+
+# ---------------------------------------------------------------------
+# Sample estimate waiting for the demo client's decision (backend step 10)
+# ---------------------------------------------------------------------
+# Without it the client portal has nothing to approve or decline. It gets the next free
+# estimate number (same as estimates made in the app) and is found again by its title,
+# so it is added once and never clashes with estimates the team already created.
+DEMO_CLIENT_ESTIMATE = (
+    "Riverstone Backsplash and Lighting Upgrade", "Sarah Johnson", "Daniel Carter", "2026-11-09",
+    (("Materials", "Glass tile backsplash", 1, 2800), ("Labor", "Tile install (hours)", 24, 85),
+     ("Materials", "Under-cabinet LED lighting", 1, 950)),
+)
+
+
+def load_demo_client_estimate(connection):
+    title, client, creator, created, lines = DEMO_CLIENT_ESTIMATE
+    client_row = connection.execute("SELECT client_id FROM clients WHERE name = ?", (client,)).fetchone()
+    if client_row is None or connection.execute(
+            "SELECT 1 FROM estimates WHERE title = ? AND client_id = ?", (title, client_row[0])).fetchone():
+        return
+    items = []
+    for category, description, quantity, unit_cost in lines:
+        category_row = connection.execute("SELECT category_id FROM cost_categories WHERE name = ?", (category,)).fetchone()
+        items.append((category_row[0] if category_row else None, description, quantity, unit_cost,
+                      round(quantity * unit_cost, 2)))
+    cursor = connection.execute(
+        """INSERT INTO estimates (estimate_number, title, client_id, created_by, status, total_amount, created_at)
+           VALUES ('pending', ?, ?, (SELECT id FROM users WHERE name = ?), 'Sent', ?, ?)""",
+        (title, client_row[0], creator, round(sum(item[4] for item in items), 2), f"{created} 09:00:00"),
+    )
+    estimate_id = cursor.lastrowid
+    connection.execute("UPDATE estimates SET estimate_number = ? WHERE estimate_id = ?", (f"EST-{estimate_id}", estimate_id))
+    connection.executemany(
+        """INSERT INTO estimate_line_items (estimate_id, category_id, description, quantity, unit_cost, line_total)
+           VALUES (?, ?, ?, ?, ?, ?)""",
+        [(estimate_id, *item) for item in items],
+    )
 
 
 # ---------------------------------------------------------------------
