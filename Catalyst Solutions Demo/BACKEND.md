@@ -12,7 +12,7 @@
 |---|---|
 | `schema.sql` | Every table, based on the team ERD. Safe to run again. |
 | `database.py` | Opens the connection for each request, sets up tables at startup, and holds the query functions pages use (`get_projects()`, `create_project()`, ...). |
-| `seed_data.py` | Sample data: the 12 projects, clients, project managers, cost categories, costs to date, 10 estimates and 9 invoices. |
+| `seed_data.py` | Sample data: the 12 projects, clients, project managers, cost categories, costs to date, 10 estimates, 9 invoices and 18 tasks. |
 | `api.py` | JSON API used by the Estimates and Invoices pages (see below). |
 | `static/js/api-client.js` | `apiRequest()`, the helper the pages use to call the API (sends the CSRF token). |
 
@@ -49,11 +49,12 @@ The client demo account is linked to the client **Sarah Johnson** (Riverstone Ki
 - [x] Login (users table)
 - [x] Projects page and its cards (employee view)
 - [x] New Project form (saves to the database)
-- [x] Dashboard (employee): cards, open projects and recent activity from the database; upcoming tasks use the Schedule page's sample tasks until tasks move to the database
-- [ ] Project details page
+- [x] Dashboard (employee): cards, open projects, upcoming tasks and recent activity from the database
+- [x] Schedule: tasks are stored in the database (add, edit, complete, delete); project pages show the same tasks
+- [ ] Project details tabs other than Schedule (costs, invoices, documents, photos still use browser demo data)
 - [x] Estimates: create, edit, send, approve or reject, delete drafts, convert to a project
 - [x] Invoices: create, edit, send, mark paid or unpaid, delete drafts, PDF
-- [ ] Job costs, receipts, schedule, clients, subcontractors
+- [ ] Job costs, receipts, clients, subcontractors
 - [ ] Client and subcontractor portals (still use the sample lists in `app.py`)
 - [ ] Documents and photos (still saved to JSON files in `instance/`)
 
@@ -71,6 +72,9 @@ All endpoints need a logged-in **employee**. POST, PUT, PATCH and DELETE need th
 | GET / POST | `/api/invoices` | List invoices, or create one (`status`: Draft or Unpaid) |
 | PUT / DELETE | `/api/invoices/<id>` | Edit (Draft and Unpaid only) or delete (Draft only) |
 | PATCH | `/api/invoices/<id>/status` | Unpaid ↔ Paid (sets or clears `paid_at`) |
+| GET / POST | `/api/tasks` | List tasks, or create one |
+| PUT / DELETE | `/api/tasks/<id>` | Edit or delete a task |
+| PATCH | `/api/tasks/<id>/status` | Change status (e.g. Completed) |
 
 The server recalculates every line total and grand total. Unit prices are rounded to cents.
 

@@ -113,6 +113,7 @@ def load_sample_data(connection):
             )
 
     load_billing_samples(connection)
+    load_task_samples(connection)
 
 
 # ---------------------------------------------------------------------
@@ -209,4 +210,49 @@ def load_billing_samples(connection):
             """INSERT INTO invoice_line_items (invoice_id, description, quantity, unit_price, line_total)
                VALUES (?, ?, ?, ?, ?)""",
             [(inv_id, *item) for item in items],
+        )
+
+
+# ---------------------------------------------------------------------
+# Sample tasks (backend step 4)
+# ---------------------------------------------------------------------
+# Dates are days from the day the sample data is loaded, so a fresh demo
+# always has some overdue, some current and some upcoming tasks.
+# project, task, description, assigned to, start (days), due (days), priority, status
+TASKS = (
+    ("Riverstone Kitchen Remodel", "Order construction materials", "Order cabinets, countertops, and tile.", "Daniel Carter", -60, -55, "High", "Completed"),
+    ("Riverstone Kitchen Remodel", "Complete demolition", "Remove old cabinets, flooring, and drywall.", "Demo Crew A", -50, -44, "High", "Completed"),
+    ("Riverstone Kitchen Remodel", "Inspect electrical work", "City rough-in electrical inspection.", "Daniel Carter", -4, -2, "High", "In Progress"),
+    ("Riverstone Kitchen Remodel", "Install cabinets", "Install upper and lower cabinets and hardware.", "Finish Crew B", -1, 5, "Medium", "In Progress"),
+    ("Riverstone Kitchen Remodel", "Countertop measurement", "Template quartz countertops after cabinets are set.", "Stone Fabricator", 6, 7, "Medium", "Not Started"),
+    ("Riverstone Kitchen Remodel", "Final project walkthrough", "Walkthrough and punch list with Sarah Johnson.", "Daniel Carter", 19, 20, "Medium", "Not Started"),
+    ("Sugar Land Roof Replacement", "Tear off old roofing", "Remove shingles and damaged decking.", "Roofing Crew", -18, -14, "High", "Completed"),
+    ("Sugar Land Roof Replacement", "Order replacement gutters", "Order seamless gutters and downspouts.", "Daniel Carter", -8, -5, "Low", "Not Started"),
+    ("Sugar Land Roof Replacement", "Install underlayment and shingles", "Install synthetic underlayment and shingles.", "Roofing Crew", -3, 2, "High", "In Progress"),
+    ("Sugar Land Roof Replacement", "Final roof inspection", "City final inspection and client walkthrough.", "Daniel Carter", 2, 3, "High", "Not Started"),
+    ("Memorial Bathroom Renovation", "Submit permit application", "Bathroom remodel permit with the city.", "James Wilson", -16, -13, "High", "Completed"),
+    ("Memorial Bathroom Renovation", "Finalize tile and fixture selections", "Confirm selections with Emily Davis.", "James Wilson", -7, 3, "Medium", "In Progress"),
+    ("Memorial Bathroom Renovation", "Schedule subcontractor visit", "Plumber site visit to plan shower relocation.", "James Wilson", 4, 8, "Medium", "Not Started"),
+    ("Memorial Bathroom Renovation", "Complete demolition", "Remove tub, tile, and vanity.", "Demo Crew A", 14, 17, "Low", "Not Started"),
+    ("Katy Home Addition", "Pour foundation", "Form, inspect, and pour slab foundation.", "Concrete Sub LLC", -68, -60, "High", "Completed"),
+    ("Katy Home Addition", "Frame walls and roof", "Frame exterior walls, interior walls, and roof.", "Framing Crew", -20, -1, "High", "In Progress"),
+    ("Katy Home Addition", "Plumbing rough-in inspection", "City inspection before insulation.", "James Wilson", 3, 6, "Medium", "Not Started"),
+    ("Katy Home Addition", "Install windows and exterior doors", "Install windows, patio door, and exterior trim.", "Framing Crew", 10, 15, "Medium", "Not Started"),
+)
+
+
+def load_task_samples(connection):
+    from datetime import date, timedelta
+
+    def day(offset):
+        return (date.today() + timedelta(days=offset)).isoformat()
+
+    for project, title, description, assigned, start, due, priority, status in TASKS:
+        row = connection.execute("SELECT project_id FROM projects WHERE name = ?", (project,)).fetchone()
+        if row is None:
+            continue
+        connection.execute(
+            """INSERT INTO tasks (project_id, title, description, assigned_to, start_date, due_date, priority, status)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+            (row[0], title, description, assigned, day(start), day(due), priority, status),
         )

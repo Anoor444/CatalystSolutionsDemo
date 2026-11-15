@@ -154,13 +154,19 @@ CREATE TABLE IF NOT EXISTS subcontractor_invoices (
 
 -- ---------- Scheduling (RTM A11) ----------
 
+-- assigned_to is free text because tasks are often given to crews or
+-- subcontractors without a login (e.g. "Roofing Crew").
 CREATE TABLE IF NOT EXISTS tasks (
     task_id      INTEGER PRIMARY KEY,
     project_id   INTEGER NOT NULL REFERENCES projects(project_id) ON DELETE CASCADE,
-    assigned_to  INTEGER REFERENCES users(id) ON DELETE SET NULL,
     title        TEXT NOT NULL,
-    due_date     TEXT,
-    status       TEXT NOT NULL DEFAULT 'Not Started'
+    description  TEXT,
+    assigned_to  TEXT,
+    start_date   TEXT,
+    due_date     TEXT NOT NULL,
+    priority     TEXT NOT NULL DEFAULT 'Medium' CHECK (priority IN ('Low', 'Medium', 'High')),
+    status       TEXT NOT NULL DEFAULT 'Not Started' CHECK (status IN ('Not Started', 'In Progress', 'Completed')),
+    created_at   TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
 -- ---------- Files (RTM A10, documents page) ----------

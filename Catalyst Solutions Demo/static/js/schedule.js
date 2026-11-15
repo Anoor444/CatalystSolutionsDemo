@@ -8,12 +8,12 @@
  *   3. "render" functions redraw the cards, table, and deadline list.
  *   4. Add / edit / complete / delete changes the array, then re-renders.
  *
- * IMPORTANT: Changes live only in memory. Reloading the page resets everything.
- * When MySQL is connected, saveTask(), markTaskComplete() and deleteTask()
- * will call Flask routes instead of only changing the array.
+ * Tasks are stored in the database. saveTask(), markTaskComplete() and
+ * deleteTask() call the Flask API (/api/tasks in api.py) and only change the
+ * array after the server confirms. apiRequest() is in api-client.js.
  */
 
-// ---------- 1. Load data from Flask ----------
+// ---------- 1. Load data from Flask (database) ----------
 const scheduleData = JSON.parse(document.getElementById("sch-data").textContent);
 
 const projects = scheduleData.projects;      // [{ id, name }]
@@ -22,7 +22,6 @@ const priorities = scheduleData.priorities;  // ["Low", "Medium", "High"]
 let tasks = scheduleData.tasks;              // [{ id, project_id, name, description, assigned_to, start_date, due_date, priority, status }]
 
 // Demo-only id counter. A real database will create ids automatically.
-let nextTaskId = tasks.reduce((highest, task) => Math.max(highest, task.id), 0) + 1;
 
 // Id of the task being edited. null = adding a new task.
 let editingTaskId = null;
@@ -389,7 +388,7 @@ function showFormErrors(errors) {
 }
 
 // Runs when "Save" is clicked.
-function saveTask(event) {
+async function saveTask(event) {
     event.preventDefault();   // stop the browser from reloading the page
     clearFormErrors();
 
@@ -411,17 +410,22 @@ function saveTask(event) {
         status: formStatus.value,
     };
 
-    // FUTURE MySQL: send taskValues to a Flask route (e.g. POST /api/tasks) here,
-    // and only update the array after the server confirms it was saved.
+    // Save to the server first; only update the page after it confirms.
+    let saved;
+    try {
+        saved = editingTaskId === null
+            ? await apiRequest("POST", "/api/tasks", taskValues)
+            : await apiRequest("PUT", "/api/tasks/" + editingTaskId, taskValues);
+    } catch (err) {
+        showFormErrors([err.message]);
+        return;
+    }
     if (editingTaskId === null) {
-        taskValues.id = nextTaskId;
-        nextTaskId += 1;
-        tasks.push(taskValues);
-        showMessage("Task added: " + taskValues.name + ".");
+        tasks.push(saved);
+        showMessage("Task added: " + saved.name + ".");
     } else {
-        const existing = tasks.find((t) => t.id === editingTaskId);
-        Object.assign(existing, taskValues);
-        showMessage("Task updated: " + existing.name + ".");
+        tasks = tasks.map((t) => (t.id === saved.id ? saved : t));
+        showMessage("Task updated: " + saved.name + ".");
     }
 
     // If the page shows a different project, switch to "All Projects" so the task is visible.
@@ -432,21 +436,31 @@ function saveTask(event) {
     renderPage();
 }
 
-function markTaskComplete(taskId) {
-    const task = tasks.find((t) => t.id === taskId);
-    // FUTURE MySQL: call a Flask route (e.g. POST /api/tasks/<id>/complete) here.
-    task.status = "Completed";
-    showMessage("Marked complete: " + task.name + ".");
+async function markTaskComplete(taskId) {
+    let saved;
+    try {
+        saved = await apiRequest("PATCH", "/api/tasks/" + taskId + "/status", { status: "Completed" });
+    } catch (err) {
+        showMessage(err.message);
+        return;
+    }
+    tasks = tasks.map((t) => (t.id === saved.id ? saved : t));
+    showMessage("Marked complete: " + saved.name + ".");
     renderPage();
 }
 
-function deleteTask(taskId) {
+async function deleteTask(taskId) {
     const task = tasks.find((t) => t.id === taskId);
     // confirm() shows plain text, so the task name is displayed safely.
     if (!task || !window.confirm('Delete the task "' + task.name + '"?')) {
         return;
     }
-    // FUTURE MySQL: call a Flask route (e.g. DELETE /api/tasks/<id>) here.
+    try {
+        await apiRequest("DELETE", "/api/tasks/" + taskId);
+    } catch (err) {
+        showMessage(err.message);
+        return;
+    }
     tasks = tasks.filter((t) => t.id !== taskId);
     showMessage("Task deleted: " + task.name + ".");
     renderPage();
@@ -464,4 +478,9 @@ document.getElementById("sch-cancel-btn").addEventListener("click", closeTaskFor
 taskForm.addEventListener("submit", saveTask);
 
 renderOptions();
+// "Manage tasks" on a project's page links here as /schedule?project=<id>.
+const requestedProject = new URLSearchParams(window.location.search).get("project");
+if (requestedProject && projects.some((p) => String(p.id) === requestedProject)) {
+    projectSelect.value = requestedProject;
+}
 renderPage();
