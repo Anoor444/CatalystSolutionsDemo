@@ -3,6 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="csrf-token" content="{{ csrf_token() }}">
     <title>Job Costs | Buff Bison Construction</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
 </head>
@@ -33,17 +34,13 @@
 
         <main class="content jc-page">
 
-            <p class="demo-notice">
-                <strong>Demo data:</strong> These are sample records. Expenses you add, edit, or delete
-                are kept only in this browser tab and reset when the page is reloaded.
-            </p>
 
             <!-- Summary cards (filled in by job_costs.js) -->
             <section class="cards" aria-label="Cost summary" aria-live="polite">
                 <div class="card summary">
                     <p class="summary-label">Estimated Budget</p>
                     <p class="summary-value" id="jc-estimated-total">$0.00</p>
-                    <p class="summary-note">From the approved estimate</p>
+                    <p class="summary-note" id="jc-estimated-note">From the approved estimate</p>
                 </div>
                 <div class="card summary">
                     <p class="summary-label">Actual Costs</p>
@@ -145,7 +142,7 @@
                 <label for="jc-form-receipt">Receipt Attachment (optional)</label>
                 <input type="file" id="jc-form-receipt" name="receipt" accept=".pdf,.jpg,.jpeg,.png" aria-describedby="jc-receipt-help">
                 <p class="help-text" id="jc-receipt-help">
-                    Demo only: the file name is recorded, but the file is <strong>not uploaded or saved</strong>.
+                    PDF, JPG or PNG, up to 10 MB. The file is saved with the expense.
                     <span id="jc-current-receipt"></span>
                 </p>
             </div>
@@ -158,7 +155,7 @@
     </form>
 </dialog>
 
-<!-- Demo data from Flask (app.py -> demo_data.py). "tojson" safely converts the Python data to JSON. -->
+<!-- Job cost data from the database (app.py -> database.get_job_cost_data). "tojson" safely converts it to JSON. -->
 <script id="jc-data" type="application/json">{{ job_cost_data | tojson }}</script>
 <script src="{{ url_for('static', filename='js/job_costs.js') }}"></script>
 </body>

@@ -23,7 +23,6 @@ from werkzeug.security import check_password_hash, generate_password_hash
 from werkzeug.utils import secure_filename
 
 import database
-from demo_data import get_job_cost_data
 from user_database import DuplicateEmailError, UserDatabase
 
 app = Flask(__name__, instance_path=os.environ.get("APP_INSTANCE_PATH"))
@@ -535,7 +534,7 @@ def job_costs():
     return render_template(
         "job_costs.html",
         user_name=session["user"],
-        job_cost_data=get_job_cost_data(),
+        job_cost_data=database.get_job_cost_data(),
     )
 
 
@@ -717,6 +716,7 @@ def project_details(project_id):
         "due": project["due_date"] or "", "description": project["description"] or "",
         "address": project["address"] or "", "subcontractors": [],
         "tasks": database.get_tasks(project_id),
+        "expenses": database.get_expenses(project_id),
     }
     return render_template("project_details.html", user_name=session["user"], server_project=server_project)
 

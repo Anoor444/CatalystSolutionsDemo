@@ -116,16 +116,27 @@ CREATE TABLE IF NOT EXISTS invoice_line_items (
 
 -- ---------- Job costs (RTM A6, A7) ----------
 
+-- One row per expense on the Job Costs page. The receipt file itself is
+-- optional; when uploaded it is saved under instance/receipt_uploads/.
 CREATE TABLE IF NOT EXISTS receipts (
-    receipt_id    INTEGER PRIMARY KEY,
-    project_id    INTEGER NOT NULL REFERENCES projects(project_id) ON DELETE CASCADE,
-    category_id   INTEGER REFERENCES cost_categories(category_id),
-    uploaded_by   INTEGER REFERENCES users(id) ON DELETE SET NULL,
-    vendor_name   TEXT NOT NULL,
-    amount        DECIMAL(12,2) NOT NULL CHECK (amount >= 0),
-    receipt_date  TEXT NOT NULL,
-    file_path     TEXT,
-    created_at    TEXT NOT NULL DEFAULT (datetime('now'))
+    receipt_id        INTEGER PRIMARY KEY,
+    project_id        INTEGER NOT NULL REFERENCES projects(project_id) ON DELETE CASCADE,
+    category_id       INTEGER NOT NULL REFERENCES cost_categories(category_id),
+    uploaded_by       INTEGER REFERENCES users(id) ON DELETE SET NULL,
+    description       TEXT NOT NULL,
+    amount            DECIMAL(12,2) NOT NULL CHECK (amount >= 0),
+    expense_date      TEXT NOT NULL,
+    receipt_filename  TEXT,   -- original name, shown to users
+    file_path         TEXT,   -- stored name on disk
+    created_at        TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+-- Estimated cost per category for each project (the "Estimated" column on Job Costs).
+CREATE TABLE IF NOT EXISTS project_budget_items (
+    project_id        INTEGER NOT NULL REFERENCES projects(project_id) ON DELETE CASCADE,
+    category_id       INTEGER NOT NULL REFERENCES cost_categories(category_id),
+    estimated_amount  DECIMAL(12,2) NOT NULL CHECK (estimated_amount >= 0),
+    PRIMARY KEY (project_id, category_id)
 );
 
 -- ---------- Subcontractors (RTM A8) ----------

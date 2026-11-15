@@ -8,21 +8,19 @@
  *   3. "render" functions redraw the cards and tables from those arrays.
  *   4. Adding / editing / deleting an expense changes the array, then re-renders.
  *
- * IMPORTANT: Changes live only in memory. Reloading the page resets everything.
- * When MySQL is connected, saveExpense() and deleteExpense() will call Flask
- * routes instead of only changing the array.
+ * Expenses are stored in the database. saveExpense() and deleteExpense() call
+ * the Flask API (/api/expenses in api.py) and only change the array after the
+ * server confirms. Receipt files are uploaded with the expense and can be
+ * opened from the Receipt column.
  */
 
 // ---------- 1. Load data from Flask ----------
 const jobCostData = JSON.parse(document.getElementById("jc-data").textContent);
 
-const projects = jobCostData.projects;       // [{ id, name }]
+const projects = jobCostData.projects;       // [{ id, name, budget }]
 const categories = jobCostData.categories;   // ["Materials", "Labor", ...]
 const estimates = jobCostData.estimates;     // [{ project_id, category, estimated_amount }]
-let expenses = jobCostData.expenses;         // [{ id, project_id, expense_date, description, category, amount, receipt_name }]
-
-// Demo-only id counter. A real database will create ids automatically.
-let nextExpenseId = expenses.reduce((highest, expense) => Math.max(highest, expense.id), 0) + 1;
+let expenses = jobCostData.expenses;         // [{ id, project_id, expense_date, description, category, amount, receipt_name, has_receipt }]
 
 // When editing, this holds the id of the expense being edited. null = adding a new one.
 let editingExpenseId = null;
@@ -140,6 +138,12 @@ function calculateProjectTotals(projectId) {
         estimatedTotal += getEstimatedAmount(projectId, category);
         actualTotal += getActualAmount(projectId, category);
     });
+    // A project with no budget by category (e.g. made with the New Project form)
+    // uses its overall budget as the estimate.
+    if (!estimates.some((e) => e.project_id === projectId)) {
+        const project = projects.find((p) => p.id === projectId);
+        estimatedTotal = project ? project.budget : 0;
+    }
     estimatedTotal = roundToCents(estimatedTotal);
     actualTotal = roundToCents(actualTotal);
 
@@ -170,6 +174,9 @@ function renderSummaryCards(projectId) {
     const expenseCount = expenses.filter((e) => e.project_id === projectId).length;
 
     document.getElementById("jc-estimated-total").textContent = formatCurrency(totals.estimatedTotal);
+    document.getElementById("jc-estimated-note").textContent = estimates.some((e) => e.project_id === projectId)
+        ? "From the approved estimate"
+        : "Project budget (no breakdown by category)";
     document.getElementById("jc-actual-total").textContent = formatCurrency(totals.actualTotal);
     document.getElementById("jc-expense-count").textContent =
         expenseCount + (expenseCount === 1 ? " expense recorded" : " expenses recorded");
@@ -254,11 +261,17 @@ function renderExpenseTable(projectId) {
         row.appendChild(createElementWithText("td", getProjectName(expense.project_id)));
         row.appendChild(createElementWithText("td", formatCurrency(expense.amount), "num"));
 
-        // Receipt: show the file name, and clearly say it is NOT actually uploaded.
+        // Receipt: a link to the saved file, or the name of a sample receipt with no file.
         const receiptCell = document.createElement("td");
-        if (expense.receipt_name) {
+        if (expense.has_receipt) {
+            const link = createElementWithText("a", expense.receipt_name || "View receipt", "jc-receipt-name");
+            link.href = "/api/expenses/" + expense.id + "/receipt";
+            link.target = "_blank";
+            link.rel = "noopener";
+            receiptCell.appendChild(link);
+        } else if (expense.receipt_name) {
             receiptCell.appendChild(createElementWithText("span", expense.receipt_name, "jc-receipt-name"));
-            receiptCell.appendChild(createElementWithText("span", "Not uploaded (demo)", "muted-tag"));
+            receiptCell.appendChild(createElementWithText("span", "Not on file", "muted-tag"));
         } else {
             receiptCell.appendChild(createElementWithText("span", "None", "muted"));
         }
@@ -311,7 +324,7 @@ function openExpenseForm(expense) {
         formCategory.value = expense.category;
         formAmount.value = expense.amount.toFixed(2);
         currentReceiptText.textContent = expense.receipt_name
-            ? " Current receipt name: " + expense.receipt_name + " (choose a new file to replace it)."
+            ? " Current receipt: " + expense.receipt_name + " (choose a new file to replace it)."
             : "";
     } else {
         editingExpenseId = null;
@@ -373,8 +386,28 @@ function showFormErrors(errors) {
     formErrors.replaceChildren(heading, list);
 }
 
+// Sends the form (fields + optional receipt file) to the server.
+async function sendExpense(method, url, formData) {
+    const tokenTag = document.querySelector('meta[name="csrf-token"]');
+    const response = await fetch(url, {
+        method: method,
+        credentials: "same-origin",
+        headers: { "Accept": "application/json", "X-CSRF-Token": tokenTag ? tokenTag.content : "" },
+        body: formData,
+    });
+    if (response.status === 204) {
+        return null;
+    }
+    let payload = null;
+    try { payload = await response.json(); } catch (_) { /* not JSON */ }
+    if (!response.ok) {
+        throw new Error((payload && payload.error) || "Something went wrong (error " + response.status + ").");
+    }
+    return payload;
+}
+
 // Runs when "Save Expense" is clicked.
-function saveExpense(event) {
+async function saveExpense(event) {
     event.preventDefault();   // stop the browser from reloading the page
     clearFormErrors();
 
@@ -385,7 +418,6 @@ function saveExpense(event) {
         return;
     }
 
-    // Only the file NAME is kept. Nothing is uploaded in this demo.
     const chosenFile = formReceipt.files[0];
 
     const expenseValues = {
@@ -396,21 +428,27 @@ function saveExpense(event) {
         amount: roundToCents(Number(formAmount.value)),
     };
 
-    // FUTURE MySQL: send expenseValues to a Flask route (e.g. POST /api/expenses) here,
-    // and only update the array after the server confirms it was saved.
+    // Save to the server first (with the receipt file, if one was chosen).
+    const formData = new FormData();
+    Object.entries(expenseValues).forEach(([key, value]) => formData.append(key, value));
+    if (chosenFile) {
+        formData.append("receipt", chosenFile);
+    }
+    let saved;
+    try {
+        saved = editingExpenseId === null
+            ? await sendExpense("POST", "/api/expenses", formData)
+            : await sendExpense("PUT", "/api/expenses/" + editingExpenseId, formData);
+    } catch (err) {
+        showFormErrors([err.message]);
+        return;
+    }
     if (editingExpenseId === null) {
-        expenseValues.id = nextExpenseId;
-        nextExpenseId += 1;
-        expenseValues.receipt_name = chosenFile ? chosenFile.name : null;
-        expenses.push(expenseValues);
-        showMessage("Expense added: " + expenseValues.description + " (" + formatCurrency(expenseValues.amount) + ").");
+        expenses.push(saved);
+        showMessage("Expense added: " + saved.description + " (" + formatCurrency(saved.amount) + ").");
     } else {
-        const existing = expenses.find((e) => e.id === editingExpenseId);
-        Object.assign(existing, expenseValues);
-        if (chosenFile) {
-            existing.receipt_name = chosenFile.name;
-        }
-        showMessage("Expense updated: " + existing.description + ".");
+        expenses = expenses.map((e) => (e.id === saved.id ? saved : e));
+        showMessage("Expense updated: " + saved.description + ".");
     }
 
     // Switch the page to the expense's project so the user sees the change.
@@ -419,13 +457,18 @@ function saveExpense(event) {
     renderPage();
 }
 
-function deleteExpense(expenseId) {
+async function deleteExpense(expenseId) {
     const expense = expenses.find((e) => e.id === expenseId);
     // confirm() shows plain text, so the description is displayed safely.
     if (!expense || !window.confirm('Delete the expense "' + expense.description + '"?')) {
         return;
     }
-    // FUTURE MySQL: call a Flask route (e.g. DELETE /api/expenses/<id>) here.
+    try {
+        await sendExpense("DELETE", "/api/expenses/" + expenseId);
+    } catch (err) {
+        showMessage(err.message);
+        return;
+    }
     expenses = expenses.filter((e) => e.id !== expenseId);
     showMessage("Expense deleted: " + expense.description + ".");
     renderPage();
@@ -441,4 +484,9 @@ document.getElementById("jc-cancel-btn").addEventListener("click", closeExpenseF
 expenseForm.addEventListener("submit", saveExpense);
 
 renderProjectOptions();
+// "Manage costs" on a project's page links here as /job-costs?project=<id>.
+const requestedProject = new URLSearchParams(window.location.search).get("project");
+if (requestedProject && projects.some((p) => String(p.id) === requestedProject)) {
+    projectSelect.value = requestedProject;
+}
 renderPage();
