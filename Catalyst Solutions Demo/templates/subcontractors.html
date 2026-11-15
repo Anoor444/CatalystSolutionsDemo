@@ -31,7 +31,6 @@
         </header>
 
         <main class="content" data-directory="subcontractors">
-            <p class="demo-notice">These fictional subcontractors are for demonstration. New subcontractor records are not saved yet.</p>
             <div class="directory-summary" data-directory-summary></div>
 
             <section class="card">
@@ -60,83 +59,22 @@
                                 <th>Trade/Specialty</th>
                                 <th>Assigned Projects</th>
                                 <th>Status</th>
+                                <th>Actions</th>
                             </tr>
                         </thead>
                         <tbody>
-                            <!-- Static sample data (fictional) -->
+                            {% for sub in subcontractors %}
                             <tr class="sub-row">
-                                <td>John Miller</td>
-                                <td>Miller Electrical Services</td>
-                                <td>Electrical</td>
-                                <td>2</td>
-                                <td><span class="status completed">Active</span></td>
+                                <td><a class="project-name-link" href="{{ url_for('new_subcontractor', subcontractor_id=sub.subcontractor_id) }}">{{ sub.contact_name }}</a>{% if sub.user_id %}<br><small class="muted">Has portal login</small>{% endif %}</td>
+                                <td>{{ sub.company_name }}</td>
+                                <td>{{ sub.trade }}</td>
+                                <td title="{{ sub.project_names or 'Not assigned' }}">{{ sub.project_count }}</td>
+                                <td><span class="status {{ 'completed' if sub.status == 'Active' else 'planning' }}">{{ sub.status }}</span></td>
+                                <td><a class="btn-outline" href="{{ url_for('new_subcontractor', subcontractor_id=sub.subcontractor_id) }}" aria-label="Edit {{ sub.contact_name }}">Edit</a></td>
                             </tr>
-                            <tr class="sub-row">
-                                <td>Carlos Rodriguez</td>
-                                <td>Rodriguez Plumbing LLC</td>
-                                <td>Plumbing</td>
-                                <td>1</td>
-                                <td><span class="status completed">Active</span></td>
-                            </tr>
-                            <tr class="sub-row">
-                                <td>David Thompson</td>
-                                <td>Thompson Roofing</td>
-                                <td>Roofing</td>
-                                <td>1</td>
-                                <td><span class="status planning">Inactive</span></td>
-                            </tr>
-
-                            <tr class="sub-row">
-                                <td>Priya Patel</td>
-                                <td>Patel HVAC Services</td>
-                                <td>Heating &amp; Cooling</td>
-                                <td>3</td>
-                                <td><span class="status completed">Active</span></td>
-                            </tr>
-                            <tr class="sub-row">
-                                <td>Marcus Reed</td>
-                                <td>Reed Concrete Works</td>
-                                <td>Concrete &amp; Foundations</td>
-                                <td>2</td>
-                                <td><span class="status completed">Active</span></td>
-                            </tr>
-                            <tr class="sub-row">
-                                <td>Ashley Nguyen</td>
-                                <td>Nguyen Custom Cabinets</td>
-                                <td>Cabinetry &amp; Millwork</td>
-                                <td>1</td>
-                                <td><span class="status completed">Active</span></td>
-                            </tr>
-                            <tr class="sub-row">
-                                <td>Luis Martinez</td>
-                                <td>Martinez Flooring Co.</td>
-                                <td>Flooring &amp; Tile</td>
-                                <td>2</td>
-                                <td><span class="status completed">Active</span></td>
-                            </tr>
-                            <tr class="sub-row">
-                                <td>Nicole Brooks</td>
-                                <td>Brooks Painting Studio</td>
-                                <td>Interior &amp; Exterior Painting</td>
-                                <td>1</td>
-                                <td><span class="status completed">Active</span></td>
-                            </tr>
-                            <tr class="sub-row">
-                                <td>Kevin Wilson</td>
-                                <td>Wilson Framing Crew</td>
-                                <td>Framing &amp; Carpentry</td>
-                                <td>0</td>
-                                <td><span class="status planning">Inactive</span></td>
-                            </tr>
-                            <tr class="sub-row">
-                                <td>Tanya Robinson</td>
-                                <td>Robinson Landscape Design</td>
-                                <td>Landscaping</td>
-                                <td>1</td>
-                                <td><span class="status completed">Active</span></td>
-                            </tr>
+                            {% endfor %}
                             <tr data-directory-empty hidden>
-                                <td colspan="5">No subcontractors match your search or filters. Try a different search or clear the filters.</td>
+                                <td colspan="6">No subcontractors match your search or filters. Try a different search or clear the filters.</td>
                             </tr>
                         </tbody>
                     </table>

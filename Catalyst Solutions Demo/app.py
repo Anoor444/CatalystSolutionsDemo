@@ -728,34 +728,133 @@ def logout():
     return redirect(url_for("login"))
 
 
+# ---------- Clients and subcontractors (employee directory) ----------
+
+def _directory_text(form, key, label, errors, required=False, limit=200):
+    value = form.get(key, "").strip()
+    if required and not value:
+        errors.append(f"{label} is required.")
+    elif len(value) > limit:
+        errors.append(f"{label} must be {limit} characters or fewer.")
+    return value
+
+
+def _check_email(value, label, errors, required=False):
+    if not value:
+        if required:
+            errors.append(f"{label} is required.")
+    elif "@" not in value or "." not in value.split("@")[-1] or " " in value:
+        errors.append(f"{label} doesn't look like a valid email address.")
+
+
 @app.route("/subcontractors")
 @role_required("employee")
 def subcontractors():
-    return render_template("subcontractors.html", user_name=session["user"])
+    return render_template("subcontractors.html", user_name=session["user"],
+                           subcontractors=database.get_subcontractors())
 
-@app.route("/subcontractors/new", methods=["GET", "POST"])
+
+@app.route("/subcontractors/new", methods=["GET", "POST"], defaults={"subcontractor_id": None})
+@app.route("/subcontractors/<int:subcontractor_id>/edit", methods=["GET", "POST"])
 @role_required("employee")
-def new_subcontractor():
-    if request.method == "POST":
-        # Nothing is saved yet. Later: insert the form data into MySQL here.
-        return redirect(url_for("subcontractors"))
+def new_subcontractor(subcontractor_id):
+    existing = None
+    if subcontractor_id is not None:
+        existing = database.get_subcontractor(subcontractor_id)
+        if existing is None:
+            abort(404)
+    projects = database.get_project_choices()
+    errors = []
 
-    return render_template("new_subcontractor.html", user_name=session["user"])
+    if request.method == "POST":
+        form = request.form
+        data = {
+            "name": _directory_text(form, "full_name", "Full name", errors, required=True),
+            "company": _directory_text(form, "company", "Company name", errors, required=True),
+            "email": _directory_text(form, "email", "Email address", errors),
+            "phone": _directory_text(form, "phone", "Phone number", errors, limit=40),
+            "address": _directory_text(form, "address", "Business address", errors),
+            "trade": _directory_text(form, "trade", "Trade/specialty", errors, required=True, limit=100),
+            "license_number": _directory_text(form, "license", "License number", errors, limit=100),
+            "status": form.get("status", "Active"),
+            "notes": _directory_text(form, "notes", "Notes", errors, limit=1000),
+        }
+        _check_email(data["email"], "Email address", errors, required=True)
+        if data["email"] and database.subcontractor_email_taken(data["email"], subcontractor_id):
+            errors.append("Another subcontractor already uses that email address.")
+        if data["status"] not in database.DIRECTORY_STATUSES:
+            errors.append("Choose a valid status.")
+        valid_ids = {project["project_id"] for project in projects}
+        try:
+            project_ids = {int(value) for value in form.getlist("project_ids")}
+        except ValueError:
+            project_ids = {0}
+        if not project_ids <= valid_ids:
+            errors.append("One of the selected projects doesn't exist.")
+        if not errors:
+            database.save_subcontractor(data, project_ids, subcontractor_id)
+            return redirect(url_for("subcontractors"))
+        values = dict(form)
+        assigned = project_ids & valid_ids
+    elif existing is not None:
+        values = {"full_name": existing["contact_name"], "company": existing["company_name"],
+                  "email": existing["email"], "phone": existing["phone"], "address": existing["address"],
+                  "trade": existing["trade"], "license": existing["license_number"],
+                  "status": existing["status"], "notes": existing["notes"]}
+        assigned = set(database.get_subcontractor_project_ids(subcontractor_id))
+    else:
+        values, assigned = {}, set()
+
+    return render_template("new_subcontractor.html", user_name=session["user"], errors=errors,
+                           values=values, projects=projects, assigned=assigned, existing=existing)
+
 
 @app.route("/clients")
 @role_required("employee")
 def clients():
-    return render_template("clients.html", user_name=session["user"])
+    return render_template("clients.html", user_name=session["user"], clients=database.get_clients())
 
 
-@app.route("/clients/new", methods=["GET", "POST"])
+@app.route("/clients/new", methods=["GET", "POST"], defaults={"client_id": None})
+@app.route("/clients/<int:client_id>/edit", methods=["GET", "POST"])
 @role_required("employee")
-def new_client():
-    if request.method == "POST":
-        # Client records are not persisted yet; storage will be added with the database.
-        return redirect(url_for("clients"))
+def new_client(client_id):
+    existing = None
+    if client_id is not None:
+        existing = database.get_client(client_id)
+        if existing is None:
+            abort(404)
+    errors = []
 
-    return render_template("new_client.html", user_name=session["user"])
+    if request.method == "POST":
+        form = request.form
+        data = {
+            "name": _directory_text(form, "client_name", "Client name", errors, required=True),
+            "company": _directory_text(form, "company", "Company", errors),
+            "email": _directory_text(form, "email", "Email address", errors),
+            "phone": _directory_text(form, "phone", "Phone number", errors, limit=40),
+            "address": _directory_text(form, "address", "Address", errors),
+            "status": form.get("status", "Active"),
+            "notes": _directory_text(form, "notes", "Notes", errors, limit=1000),
+        }
+        _check_email(data["email"], "Email address", errors)
+        if data["name"] and database.client_name_taken(data["name"], client_id):
+            errors.append("A client with that name already exists.")
+        if data["status"] not in database.DIRECTORY_STATUSES:
+            errors.append("Choose a valid status.")
+        if not errors:
+            database.save_client(data, client_id)
+            return redirect(url_for("clients"))
+        values = dict(form)
+    elif existing is not None:
+        values = {"client_name": existing["name"], "company": existing["company"], "email": existing["email"],
+                  "phone": existing["phone"], "address": existing["address"], "status": existing["status"],
+                  "notes": existing["notes"]}
+    else:
+        values = {}
+
+    return render_template("new_client.html", user_name=session["user"], errors=errors,
+                           values=values, existing=existing)
 
 
 @app.route("/settings")

@@ -30,8 +30,12 @@ CREATE TABLE IF NOT EXISTS clients (
     client_id     INTEGER PRIMARY KEY,
     user_id       INTEGER UNIQUE REFERENCES users(id) ON DELETE SET NULL,  -- login for the client portal (optional)
     name          TEXT NOT NULL,
+    company       TEXT,
     email         TEXT,
     phone         TEXT,
+    address       TEXT,
+    status        TEXT NOT NULL DEFAULT 'Active' CHECK (status IN ('Active', 'Inactive')),
+    notes         TEXT,
     created_at    TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
@@ -43,6 +47,10 @@ CREATE TABLE IF NOT EXISTS subcontractors (
     trade            TEXT,
     email            TEXT,
     phone            TEXT,
+    address          TEXT,
+    license_number   TEXT,
+    status           TEXT NOT NULL DEFAULT 'Active' CHECK (status IN ('Active', 'Inactive')),
+    notes            TEXT,
     created_at       TEXT NOT NULL DEFAULT (datetime('now'))
 );
 

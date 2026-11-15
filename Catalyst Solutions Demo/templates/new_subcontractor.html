@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Add Subcontractor | Buff Bison Construction</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <style>.checkbox-row { display: flex; align-items: center; gap: 8px; font-weight: normal; } .checkbox-row input { width: auto; }</style>
 </head>
 <body>
 <div class="app">
@@ -18,7 +19,7 @@
 
         <header class="header">
             <div>
-                <h1>Add New Subcontractor</h1>
+                <h1>{{ 'Edit Subcontractor' if existing else 'Add New Subcontractor' }}</h1>
                 <p class="welcome">Enter subcontractor information to add them to the system.</p>
             </div>
             <div class="header-right">
@@ -31,8 +32,14 @@
 
         <main class="content">
             <!-- Fields marked required are checked by the browser (HTML5 validation) -->
-            <form method="POST" action="{{ url_for('new_subcontractor') }}" class="form-page">
+            <form method="POST" action="{{ url_for('new_subcontractor', subcontractor_id=existing.subcontractor_id) if existing else url_for('new_subcontractor') }}" class="form-page">
                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+                {% if errors %}
+                <div class="login-error" role="alert">
+                    {% for error in errors %}<div>{{ error }}</div>{% endfor %}
+                </div>
+                {% endif %}
 
                 <!-- Contact information -->
                 <section class="card form-section">
@@ -40,23 +47,23 @@
                     <div class="form-grid">
                         <div class="form-field">
                             <label for="full_name">Full Name <span class="required">*</span></label>
-                            <input type="text" id="full_name" name="full_name" required>
+                            <input type="text" id="full_name" name="full_name" value="{{ values.get('full_name') or '' }}" required>
                         </div>
                         <div class="form-field">
                             <label for="company">Company Name <span class="required">*</span></label>
-                            <input type="text" id="company" name="company" required>
+                            <input type="text" id="company" name="company" value="{{ values.get('company') or '' }}" required>
                         </div>
                         <div class="form-field">
                             <label for="email">Email Address <span class="required">*</span></label>
-                            <input type="email" id="email" name="email" required>
+                            <input type="email" id="email" name="email" value="{{ values.get('email') or '' }}" required>
                         </div>
                         <div class="form-field">
                             <label for="phone">Phone Number</label>
-                            <input type="tel" id="phone" name="phone">
+                            <input type="tel" id="phone" name="phone" value="{{ values.get('phone') or '' }}">
                         </div>
                         <div class="form-field full">
                             <label for="address">Business Address (optional)</label>
-                            <input type="text" id="address" name="address">
+                            <input type="text" id="address" name="address" value="{{ values.get('address') or '' }}">
                         </div>
                     </div>
                 </section>
@@ -67,33 +74,43 @@
                     <div class="form-grid">
                         <div class="form-field">
                             <label for="trade">Trade/Specialty <span class="required">*</span></label>
-                            <select id="trade" name="trade" required>
-                                <option value="">Select a trade</option>
-                                <option>Electrical</option>
-                                <option>Plumbing</option>
-                                <option>Roofing</option>
-                                <option>Painting</option>
-                                <option>Flooring</option>
-                                <option>HVAC</option>
-                                <option>General Contracting</option>
-                                <option>Other</option>
-                            </select>
+                            <input type="text" id="trade" name="trade" list="trade-options" value="{{ values.get('trade') or '' }}" required>
+                            <datalist id="trade-options">
+                                {% for trade in ['Electrical', 'Plumbing', 'Roofing', 'Painting', 'Flooring', 'HVAC', 'General Construction', 'Concrete & Foundations', 'Framing & Carpentry', 'Landscaping', 'Other'] %}<option value="{{ trade }}">{% endfor %}
+                            </datalist>
                         </div>
                         <div class="form-field">
                             <label for="license">License Number (optional)</label>
-                            <input type="text" id="license" name="license">
+                            <input type="text" id="license" name="license" value="{{ values.get('license') or '' }}">
                         </div>
                         <div class="form-field">
                             <label for="status">Status</label>
                             <select id="status" name="status">
-                                <option selected>Active</option>
-                                <option>Inactive</option>
+                                {% for status in ['Active', 'Inactive'] %}
+                                <option {% if (values.get('status') or 'Active') == status %}selected{% endif %}>{{ status }}</option>
+                                {% endfor %}
                             </select>
                         </div>
                         <div class="form-field full">
                             <label for="notes">Notes (optional)</label>
-                            <textarea id="notes" name="notes"></textarea>
+                            <textarea id="notes" name="notes">{{ values.get('notes') or '' }}</textarea>
                         </div>
+                    </div>
+                </section>
+
+                <!-- Project assignments (used by the subcontractor portal) -->
+                <section class="card form-section">
+                    <h2>Assigned Projects</h2>
+                    <p class="welcome">Assigned subcontractors can see these projects when they log in with this email.</p>
+                    <div class="form-grid">
+                        {% for project in projects %}
+                        <label class="checkbox-row">
+                            <input type="checkbox" name="project_ids" value="{{ project.project_id }}" {% if project.project_id in assigned %}checked{% endif %}>
+                            {{ project.name }}{% if project.status == 'Completed' %} <small class="muted">(completed)</small>{% endif %}
+                        </label>
+                        {% else %}
+                        <p class="welcome">No projects yet.</p>
+                        {% endfor %}
                     </div>
                 </section>
 

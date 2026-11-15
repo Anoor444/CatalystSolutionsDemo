@@ -5,8 +5,9 @@
   const role = window.portalContext.role, path = location.pathname;
   if (path === '/settings' || path === '/settings/change-password') return;
   // Preserve the original employee screens and their existing demo behavior.
-  // Dashboard, Projects and New Project use the database (server-rendered), so the browser demo layer leaves them alone.
-  if (role === 'employee' && ['/dashboard', '/projects', '/new-project', '/estimates', '/invoices', '/job-costs', '/schedule'].includes(path)) return;
+  // These employee pages (and Clients/Subcontractors) use the database (server-rendered), so the browser demo layer leaves them alone.
+  if (role === 'employee' && (['/dashboard', '/projects', '/new-project', '/estimates', '/invoices', '/job-costs', '/schedule'].includes(path)
+      || /^\/(clients|subcontractors)(\/|$)/.test(path))) return;
   const main = document.querySelector('main.content');
   if (!main) return;
   const banner = document.createElement('p'); banner.className = 'demo-banner';

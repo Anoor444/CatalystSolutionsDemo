@@ -99,6 +99,7 @@ def load_sample_data(connection):
     load_billing_samples(connection)
     load_task_samples(connection)
     load_cost_samples(connection)
+    load_directory_samples(connection)
 
 
 # ---------------------------------------------------------------------
@@ -325,3 +326,77 @@ def copy_estimate_budget(connection, project_id):
            GROUP BY li.category_id""",
         (project_id,),
     )
+
+
+# ---------------------------------------------------------------------
+# Sample client details and subcontractors (backend step 6)
+# ---------------------------------------------------------------------
+# client: (email, phone, company)
+CLIENT_DETAILS = {
+    "Sarah Johnson": ("sarah.johnson@example.com", "(555) 010-1001", None),
+    "Michael Thompson": ("michael.thompson@example.com", "(555) 010-1002", None),
+    "Emily Davis": ("emily.davis@example.com", "(555) 010-1003", None),
+    "Robert Garcia": ("robert.garcia@example.com", "(555) 010-1004", None),
+    "Robert Nguyen": ("robert.nguyen@example.com", "(713) 555-0105", None),
+    "Olivia Martinez": ("olivia.martinez@example.com", "(281) 555-0106", None),
+    "David Chen": ("david.chen@example.com", "(832) 555-0107", None),
+    "Lakeside Dental Group": ("office@lakesidedental.example.com", "(346) 555-0108", "Lakeside Dental Group"),
+    "Rachel Morgan": ("rachel.morgan@example.com", "(713) 555-0109", None),
+    "Marcus Williams": ("marcus.williams@example.com", "(281) 555-0110", None),
+    "Sophia Patel": ("sophia.patel@example.com", "(832) 555-0111", None),
+    "William Anderson": ("william.anderson@example.com", "(346) 555-0112", None),
+}
+
+# contact, company, trade, email, phone, status, assigned projects
+SUBCONTRACTORS = (
+    ("Demo Subcontractor", "Demo Subcontracting LLC", "General Construction", "demo.subcontractor@buffbison.com",
+     "(555) 010-2000", "Active", ("Riverstone Kitchen Remodel", "Sugar Land Roof Replacement", "Memorial Bathroom Renovation")),
+    ("John Miller", "Miller Electrical Services", "Electrical", "john@millerelectrical.example.com", "(713) 555-0201",
+     "Active", ("Riverstone Kitchen Remodel", "Heights Garage Conversion")),
+    ("Carlos Rodriguez", "Rodriguez Plumbing LLC", "Plumbing", "carlos@rodriguezplumbing.example.com", "(281) 555-0202",
+     "Active", ("Memorial Bathroom Renovation",)),
+    ("David Thompson", "Thompson Roofing", "Roofing", "david@thompsonroofing.example.com", "(832) 555-0203",
+     "Inactive", ("Sugar Land Roof Replacement",)),
+    ("Priya Patel", "Patel HVAC Services", "Heating & Cooling", "priya@patelhvac.example.com", "(346) 555-0204",
+     "Active", ("Katy Home Addition", "Spring Office Build-Out", "Heights Garage Conversion")),
+    ("Marcus Reed", "Reed Concrete Works", "Concrete & Foundations", "marcus@reedconcrete.example.com", "(713) 555-0205",
+     "Active", ("Katy Home Addition", "Pearland Patio Extension")),
+    ("Ashley Nguyen", "Nguyen Custom Cabinets", "Cabinetry & Millwork", "ashley@nguyencabinets.example.com", "(281) 555-0206",
+     "Active", ("Riverstone Kitchen Remodel",)),
+    ("Luis Martinez", "Martinez Flooring Co.", "Flooring & Tile", "luis@martinezflooring.example.com", "(832) 555-0207",
+     "Active", ("West University Flooring Upgrade", "Memorial Bathroom Renovation")),
+    ("Nicole Brooks", "Brooks Painting Studio", "Interior & Exterior Painting", "nicole@brookspainting.example.com",
+     "(346) 555-0208", "Active", ("Cypress Storm Damage Repair",)),
+    ("Kevin Wilson", "Wilson Framing Crew", "Framing & Carpentry", "kevin@wilsonframing.example.com", "(713) 555-0209",
+     "Inactive", ()),
+    ("Tanya Robinson", "Robinson Landscape Design", "Landscaping", "tanya@robinsonlandscape.example.com", "(281) 555-0210",
+     "Active", ("Bellaire Outdoor Kitchen",)),
+)
+
+
+def load_directory_samples(connection):
+    for name, (email, phone, company) in CLIENT_DETAILS.items():
+        connection.execute(
+            """UPDATE clients SET email = COALESCE(email, ?), phone = COALESCE(phone, ?), company = COALESCE(company, ?)
+               WHERE name = ?""",
+            (email, phone, company, name),
+        )
+
+    if connection.execute("SELECT COUNT(*) FROM subcontractors").fetchone()[0]:
+        return
+    for contact, company, trade, email, phone, status, projects in SUBCONTRACTORS:
+        user = connection.execute(
+            "SELECT id FROM users WHERE lower(email) = lower(?) AND role = 'subcontractor'", (email,)).fetchone()
+        cursor = connection.execute(
+            """INSERT INTO subcontractors (user_id, company_name, contact_name, trade, email, phone, status)
+               VALUES (?, ?, ?, ?, ?, ?, ?)""",
+            (user[0] if user else None, company, contact, trade, email, phone, status),
+        )
+        for project in projects:
+            row = connection.execute("SELECT project_id FROM projects WHERE name = ?", (project,)).fetchone()
+            if row:
+                connection.execute(
+                    """INSERT INTO project_assignments (project_id, subcontractor_id, status, assigned_date)
+                       VALUES (?, ?, ?, '2026-09-01')""",
+                    (row[0], cursor.lastrowid, "Active" if status == "Active" else "Completed"),
+                )

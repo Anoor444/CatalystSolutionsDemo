@@ -77,7 +77,24 @@ def init_app(app, database_file):
             "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'project_budget_items'").fetchone()
 
         create_tables(connection)
-        from seed_data import load_billing_samples, load_cost_samples, load_sample_data, load_task_samples
+
+        # Step 6 added contact/status columns to clients and subcontractors.
+        # (SQLite can add columns to an existing table; the CHECK lives in schema.sql for new databases.)
+        directory_upgraded = False
+        for table, new_columns in (
+            ("clients", (("company", "TEXT"), ("address", "TEXT"),
+                         ("status", "TEXT NOT NULL DEFAULT 'Active'"), ("notes", "TEXT"))),
+            ("subcontractors", (("address", "TEXT"), ("license_number", "TEXT"),
+                                ("status", "TEXT NOT NULL DEFAULT 'Active'"), ("notes", "TEXT"))),
+        ):
+            existing = {row[1] for row in connection.execute(f"PRAGMA table_info({table})")}
+            for column, definition in new_columns:
+                if column not in existing:
+                    connection.execute(f"ALTER TABLE {table} ADD COLUMN {column} {definition}")
+                    directory_upgraded = True
+
+        from seed_data import (load_billing_samples, load_cost_samples, load_directory_samples,
+                               load_sample_data, load_task_samples)
 
         def count(table):
             return connection.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]
@@ -91,6 +108,8 @@ def init_app(app, database_file):
                 load_task_samples(connection)     # database from before step 4: add sample tasks
             if costs_are_new:
                 load_cost_samples(connection)     # database from before step 5: add sample job costs
+            if directory_upgraded:
+                load_directory_samples(connection)  # database from before step 6: client details, subcontractors
 
         # Databases created before step 3 stamped the sample projects with their creation time,
         # which would fill "Recent Activity" with 12 "project created" entries. Backdate them once.
@@ -709,3 +728,113 @@ def delete_expense(expense_id):
     with db:
         db.execute("DELETE FROM receipts WHERE receipt_id = ?", (expense_id,))
     return row["file_path"]
+
+
+# ---------------------------------------------------------------------
+# Clients and subcontractors (employee directory)
+# ---------------------------------------------------------------------
+DIRECTORY_STATUSES = ("Active", "Inactive")
+
+
+def _link_login(db, table, key, record_id, email, role):
+    """If a login account with this email exists for the role, link it (used by the portals)."""
+    if not email:
+        return
+    user = db.execute("SELECT id FROM users WHERE lower(email) = lower(?) AND role = ?", (email, role)).fetchone()
+    if user and not db.execute(f"SELECT 1 FROM {table} WHERE user_id = ? AND {key} != ?", (user["id"], record_id)).fetchone():
+        db.execute(f"UPDATE {table} SET user_id = ? WHERE {key} = ? AND user_id IS NULL", (user["id"], record_id))
+
+
+def get_clients():
+    return get_db().execute(
+        """SELECT c.*, COUNT(p.project_id) AS project_count,
+                  SUM(CASE WHEN p.status != 'Completed' THEN 1 ELSE 0 END) AS open_projects
+           FROM clients c LEFT JOIN projects p ON p.client_id = c.client_id
+           GROUP BY c.client_id ORDER BY c.name"""
+    ).fetchall()
+
+
+def get_client(client_id):
+    return get_db().execute("SELECT * FROM clients WHERE client_id = ?", (client_id,)).fetchone()
+
+
+def client_name_taken(name, exclude_id=None):
+    return get_db().execute(
+        "SELECT 1 FROM clients WHERE lower(name) = lower(?) AND client_id != ?", (name, exclude_id or 0)
+    ).fetchone() is not None
+
+
+def save_client(data, client_id=None):
+    db = get_db()
+    values = (data["name"], data["company"] or None, data["email"] or None, data["phone"] or None,
+              data["address"] or None, data["status"], data["notes"] or None)
+    with db:
+        if client_id is None:
+            client_id = db.execute(
+                """INSERT INTO clients (name, company, email, phone, address, status, notes)
+                   VALUES (?, ?, ?, ?, ?, ?, ?)""", values).lastrowid
+        else:
+            db.execute(
+                """UPDATE clients SET name = ?, company = ?, email = ?, phone = ?, address = ?, status = ?, notes = ?
+                   WHERE client_id = ?""", (*values, client_id))
+        _link_login(db, "clients", "client_id", client_id, data["email"], "client")
+    return client_id
+
+
+def get_subcontractors():
+    rows = get_db().execute(
+        """SELECT s.*, COUNT(pa.assignment_id) AS project_count, GROUP_CONCAT(p.name, ', ') AS project_names
+           FROM subcontractors s
+           LEFT JOIN project_assignments pa ON pa.subcontractor_id = s.subcontractor_id
+           LEFT JOIN projects p ON p.project_id = pa.project_id
+           GROUP BY s.subcontractor_id ORDER BY s.contact_name"""
+    ).fetchall()
+    return rows
+
+
+def get_subcontractor(subcontractor_id):
+    return get_db().execute("SELECT * FROM subcontractors WHERE subcontractor_id = ?", (subcontractor_id,)).fetchone()
+
+
+def get_subcontractor_project_ids(subcontractor_id):
+    return [row[0] for row in get_db().execute(
+        "SELECT project_id FROM project_assignments WHERE subcontractor_id = ?", (subcontractor_id,))]
+
+
+def subcontractor_email_taken(email, exclude_id=None):
+    return get_db().execute(
+        "SELECT 1 FROM subcontractors WHERE lower(email) = lower(?) AND subcontractor_id != ?", (email, exclude_id or 0)
+    ).fetchone() is not None
+
+
+def save_subcontractor(data, project_ids, subcontractor_id=None):
+    db = get_db()
+    values = (data["company"], data["name"], data["trade"], data["email"], data["phone"] or None,
+              data["address"] or None, data["license_number"] or None, data["status"], data["notes"] or None)
+    with db:
+        if subcontractor_id is None:
+            subcontractor_id = db.execute(
+                """INSERT INTO subcontractors (company_name, contact_name, trade, email, phone, address,
+                                               license_number, status, notes)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""", values).lastrowid
+        else:
+            db.execute(
+                """UPDATE subcontractors SET company_name = ?, contact_name = ?, trade = ?, email = ?, phone = ?,
+                          address = ?, license_number = ?, status = ?, notes = ? WHERE subcontractor_id = ?""",
+                (*values, subcontractor_id))
+        # Assignments: keep existing rows that are still checked, add new ones, remove unchecked.
+        current = set(get_subcontractor_project_ids(subcontractor_id))
+        wanted = set(project_ids)
+        for project_id in current - wanted:
+            db.execute("DELETE FROM project_assignments WHERE subcontractor_id = ? AND project_id = ?",
+                       (subcontractor_id, project_id))
+        for project_id in wanted - current:
+            db.execute(
+                """INSERT INTO project_assignments (project_id, subcontractor_id, status, assigned_date)
+                   VALUES (?, ?, 'Active', date('now', 'localtime'))""", (project_id, subcontractor_id))
+        _link_login(db, "subcontractors", "subcontractor_id", subcontractor_id, data["email"], "subcontractor")
+    return subcontractor_id
+
+
+def get_project_choices():
+    return get_db().execute("SELECT project_id, name, status FROM projects ORDER BY name").fetchall()

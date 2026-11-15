@@ -12,7 +12,7 @@
 |---|---|
 | `schema.sql` | Every table, based on the team ERD. Safe to run again. |
 | `database.py` | Opens the connection for each request, sets up tables at startup, and holds the query functions pages use (`get_projects()`, `create_project()`, ...). |
-| `seed_data.py` | Sample data: the 12 projects, clients, project managers, cost categories, costs to date, 10 estimates, 9 invoices, 18 tasks, category budgets and expenses. |
+| `seed_data.py` | Sample data: the 12 projects, clients, project managers, cost categories, costs to date, 10 estimates, 9 invoices, 18 tasks, category budgets, expenses, client contact details and 11 subcontractors with project assignments. |
 | `api.py` | JSON API used by the Estimates and Invoices pages (see below). |
 | `static/js/api-client.js` | `apiRequest()`, the helper the pages use to call the API (sends the CSRF token). |
 
@@ -55,7 +55,7 @@ The client demo account is linked to the client **Sarah Johnson** (Riverstone Ki
 - [x] Estimates: create, edit, send, approve or reject, delete drafts, convert to a project
 - [x] Invoices: create, edit, send, mark paid or unpaid, delete drafts, PDF
 - [x] Job Costs: expenses, budget by category and receipt uploads (PDF/JPG/PNG, 10 MB) in the database
-- [ ] Clients, Subcontractors pages
+- [x] Clients and Subcontractors: list, add, edit (status Active/Inactive instead of delete); subcontractors are assigned to projects from their form (`project_assignments`). A client or subcontractor record is linked to a login automatically when the emails match (used by the portals).
 - [ ] Client and subcontractor portals (still use the sample lists in `app.py`)
 - [ ] Documents and photos (still saved to JSON files in `instance/`)
 
