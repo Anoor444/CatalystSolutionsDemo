@@ -51,7 +51,9 @@ The client demo account is linked to the client **Sarah Johnson** (Riverstone Ki
 - [x] New Project form (saves to the database)
 - [x] Dashboard (employee): cards, open projects, upcoming tasks and recent activity from the database
 - [x] Schedule: tasks are stored in the database (add, edit, complete, delete); project pages show the same tasks
-- [ ] Project details tabs other than Schedule and Costs (invoices, documents, photos, subcontractors still use browser demo data)
+- [x] Project details page (employee): overview, Costs (budget vs actual by category + expenses), Invoices, Documents, Photos, Schedule and Subcontractors (assignments + invoice approval) tabs, all server-rendered from the database. `?tab=<name>` opens a tab; uploads started from a tab (`?project=<id>&from=project`) and approvals return to it.
+- [x] Edit Project (`/project/<id>/edit`): reuses the New Project form; client stays fixed (Clients page), progress can be set, address optional for older projects
+- [x] Invoices page links: `/invoices?new=1&project=<id>` opens a new invoice for that project, `/invoices?open=<id>` opens one invoice
 - [x] Estimates: create, edit, send, approve or reject, delete drafts, convert to a project
 - [x] Invoices: create, edit, send, mark paid or unpaid, delete drafts, PDF
 - [x] Job Costs: expenses, budget by category and receipt uploads (PDF/JPG/PNG, 10 MB) in the database
@@ -101,3 +103,5 @@ The SQL is plain and portable. The main changes would be:
 Portal pages call `database.portal_projects` / `database.portal_project` (and the `client_*` / `subcontractor_*` helpers), which check the login on the server — opening another client's project or invoice by URL returns 404. `portal.js` (the browser demo layer) is turned off for the client and subcontractor roles.
 
 Subcontractor invoice status flow (`SUB_INVOICE_TRANSITIONS`): Pending Approval → Approved or Rejected; Approved → Paid (or back to Pending); Rejected → Pending; Paid → Approved.
+
+The browser demo layer (`portal.js` + `demo-store.js`) is now off for every employee page and for the client and subcontractor portals; it only still runs on pages that have no server version yet.

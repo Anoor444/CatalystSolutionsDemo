@@ -108,6 +108,16 @@ def project_status_class(status):
         "Planning": "planning",
         "On Hold": "hold",
         "Completed": "completed",
+        # tasks, invoices, estimates and subcontractor invoices (project page tabs)
+        "Not Started": "pending",
+        "Paid": "completed",
+        "Approved": "completed",
+        "Converted": "completed",
+        "Sent": "progress",
+        "Pending Approval": "progress",
+        "Rejected": "hold",
+        "Active": "completed",
+        "Inactive": "planning",
     }.get(status, "planning")
 
 
@@ -494,6 +504,9 @@ def review_subcontractor_invoice(sub_invoice_id):
         flash(f"Invoice {invoice['invoice_number']} from {invoice['company_name']} marked {invoice['status'].lower()}.")
     except database.RuleError as error:
         flash(error.message)
+    back = request.form.get("next", "")
+    if back.startswith("/project/") and "//" not in back:
+        return redirect(back)
     return redirect(url_for("subcontractors") + "#sub-invoices")
 
 
@@ -536,8 +549,9 @@ def new_project():
 PROJECT_TYPES = ("Kitchen Remodel", "Bathroom Remodel", "Roofing", "Home Addition", "Full Renovation", "Other")
 
 
-def validate_new_project(form, managers):
-    """Check the New Project form. Returns (clean data, list of error messages)."""
+def validate_new_project(form, managers, editing=False):
+    """Check the New Project / Edit Project form. Returns (clean data, list of error messages).
+    When editing, the client stays as it is (managed on the Clients page) and progress can be set."""
     errors = []
     data = {
         "name": form.get("project_name", "").strip(),
@@ -556,9 +570,16 @@ def validate_new_project(form, managers):
         errors.append("Project name is required.")
     if data["project_type"] not in PROJECT_TYPES:
         errors.append("Choose a project type.")
-    if not data["client_name"]:
+    if not data["client_name"] and not editing:
         errors.append("Client name is required.")
-    if not data["address"]:
+    if editing:
+        try:
+            data["progress"] = int(form.get("progress", "0") or 0)
+            if not 0 <= data["progress"] <= 100:
+                raise ValueError
+        except ValueError:
+            errors.append("Progress must be a whole number from 0 to 100.")
+    if not data["address"] and not editing:
         errors.append("Address is required.")
     if data["status"] not in database.PROJECT_STATUSES:
         errors.append("Choose a valid status.")
@@ -612,18 +633,80 @@ def project_details(project_id):
     project = database.get_project(project_id)
     if project is None:
         abort(404)
-    # Same shape as the browser demo records portal.js uses for the tabbed details view.
-    server_project = {
-        "id": project["project_id"], "name": project["name"], "client": project["client_name"],
-        "manager": project["manager_name"] or "", "status": project["status"],
-        "budget": float(project["budget_amount"] or 0), "actual": float(project["actual_cost"] or 0),
-        "progress": project["progress_percent"], "start": project["start_date"] or "",
-        "due": project["due_date"] or "", "description": project["description"] or "",
-        "address": project["address"] or "", "subcontractors": [],
-        "tasks": database.get_tasks(project_id),
-        "expenses": database.get_expenses(project_id) + database.approved_subcontractor_costs(project_id),
-    }
-    return render_template("project_details.html", user_name=session["user"], server_project=server_project)
+    # Employee view: every tab is filled from the database (step 9).
+    today = date.today().isoformat()
+    tasks = [dict(t, overdue=t["status"] != "Completed" and t["due_date"] < today)
+             for t in database.get_tasks(project_id)]
+    upcoming = sorted((t for t in tasks if t["status"] != "Completed"), key=lambda t: t["due_date"])[:4]
+    invoices = [dict(i, overdue=i["status"] == "Unpaid" and i["due_date"] < today)
+                for i in database.get_invoices() if i["project_id"] == project_id]
+    estimate = None
+    if project["estimate_id"]:
+        try:
+            estimate = database.get_estimate(project["estimate_id"])
+        except database.RuleError:
+            estimate = None
+    tab = request.args.get("tab", "overview")
+    return render_template(
+        "project_details.html",
+        user_name=session["user"],
+        project=project,
+        tasks=tasks,
+        upcoming_tasks=upcoming,
+        costs=database.get_project_costs(project_id),
+        invoices=invoices,
+        invoice_totals={
+            "billed": sum(i["total_amount"] for i in invoices if i["status"] != "Draft"),
+            "paid": sum(i["total_amount"] for i in invoices if i["status"] == "Paid"),
+            "unpaid": sum(i["total_amount"] for i in invoices if i["status"] == "Unpaid"),
+        },
+        documents=database.get_documents(session["user_id"], session["role"], project_id),
+        photos=database.get_photos(session["user_id"], session["role"], project_id),
+        assignments=database.get_project_assignments(project_id),
+        sub_invoices=database.get_subcontractor_invoices(project_id=project_id),
+        transitions=database.SUB_INVOICE_TRANSITIONS,
+        estimate=estimate,
+        activity=database.get_project_activity(project_id),
+        active_tab=tab if tab in PROJECT_TABS else "overview",
+    )
+
+
+PROJECT_TABS = ("overview", "costs", "invoices", "documents", "photos", "schedule", "subcontractors")
+
+
+@app.route("/project/<int:project_id>/edit", methods=["GET", "POST"])
+@role_required("employee")
+def edit_project(project_id):
+    project = database.get_project(project_id)
+    if project is None:
+        abort(404)
+    managers = database.get_project_managers()
+    errors = []
+    if request.method == "POST":
+        form = request.form
+        data, errors = validate_new_project(form, managers, editing=True)
+        if not errors:
+            database.update_project(project_id, data)
+            flash("Project updated.")
+            return redirect(url_for("project_details", project_id=project_id))
+    else:
+        form = {
+            "project_name": project["name"], "project_type": project["project_type"] or "",
+            "description": project["description"] or "", "client_name": project["client_name"],
+            "address": project["address"] or "", "manager": str(project["project_manager_id"] or ""),
+            "start_date": project["start_date"] or "", "end_date": project["due_date"] or "",
+            "budget": f"{float(project['budget_amount'] or 0):.2f}", "status": project["status"],
+            "progress": str(project["progress_percent"]),
+        }
+    return render_template(
+        "new_project.html",
+        user_name=session["user"],
+        managers=managers,
+        statuses=database.PROJECT_STATUSES,
+        errors=errors,
+        form=form,
+        project=project,
+    )
 
 
 @app.route("/logout", methods=["POST"])
@@ -885,6 +968,8 @@ def upload_document():
                 error = "Choose a PDF, Word, Excel, CSV, or TXT file."
             else:
                 database.add_document(project_id, session["user_id"], document_type, original, stored)
+                if request.args.get("from") == "project" and project_id:
+                    return redirect(url_for("project_details", project_id=project_id, tab="documents"))
                 return redirect(url_for("documents", project=project_id) if request.args.get("project") else url_for("documents"))
 
     return render_template(
@@ -956,6 +1041,8 @@ def upload_photo():
                 error = "Choose a JPG, PNG, GIF, or WebP image."
             else:
                 database.add_photo(project_id, session["user_id"], title, original, stored)
+                if request.args.get("from") == "project" and session["role"] == "employee":
+                    return redirect(url_for("project_details", project_id=project_id, tab="photos"))
                 return redirect(url_for("photos", project=project_id) if request.args.get("project") else url_for("photos"))
 
     return render_template(

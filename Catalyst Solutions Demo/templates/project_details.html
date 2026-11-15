@@ -3,8 +3,28 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Riverstone Kitchen Remodel | Buff Bison Construction</title>
+    <title>{{ project.name }} | Buff Bison Construction</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <style>
+        .portal-notice { background: #e3f1e6; color: #2b6a3a; border: 1px solid #b7dcc0; padding: 10px 14px; border-radius: 4px; margin-bottom: 16px; }
+        .tabs { flex-wrap: wrap; }
+        .tab-toolbar { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; }
+        .tab-toolbar h2 { margin: 0; }
+        .tab-toolbar .actions { display: flex; gap: 8px; flex-wrap: wrap; }
+        .tab-panel > .card + .card { margin-top: 24px; }
+        .mini-stats { display: flex; gap: 32px; flex-wrap: wrap; margin-bottom: 16px; }
+        .mini-stats small { display: block; font-size: 11px; font-weight: bold; text-transform: uppercase; color: var(--muted, #6b7280); }
+        .mini-stats strong { font-size: 20px; }
+        .num { text-align: right; white-space: nowrap; }
+        .overdue-date { color: #8a2b2b; font-weight: bold; }
+        .muted-note { color: var(--muted, #6b7280); font-size: 13px; }
+        .row-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+        .row-actions form { margin: 0; }
+        .tab-link { background: none; border: 0; padding: 0; cursor: pointer; font: inherit; }
+        .estimate-lines { margin-top: 8px; }
+        .estimate-lines td, .estimate-lines th { padding: 6px 8px; font-size: 13px; }
+        .total-row td { font-weight: bold; border-top: 2px solid var(--navy, #0b1530); }
+    </style>
 </head>
 <body>
 <div class="app">
@@ -18,13 +38,11 @@
 
         <header class="header">
             <div>
-                <h1>Riverstone Kitchen Remodel</h1>
-                <p class="welcome">Sarah Johnson · Houston, TX</p>
+                <h1>{{ project.name }}</h1>
+                <p class="welcome">{{ project.client_name }}{% if project.address %} · {{ project.address }}{% endif %}</p>
             </div>
             <div class="header-right">
-                {% if current_role == 'employee' %}
-                <a href="#" class="btn">Edit Project</a>
-                {% endif %}
+                <a href="{{ url_for('edit_project', project_id=project.project_id) }}" class="btn">Edit Project</a>
                 <div class="profile">
                     <span class="avatar">{{ user_name[0] }}</span>
                     <span class="profile-name">{{ user_name }}</span>
@@ -36,193 +54,413 @@
 
             <a href="{{ url_for('projects') }}" class="back-link">← Back to Projects</a>
 
+            {% for message in get_flashed_messages(category_filter=['message']) %}
+            <p class="portal-notice" role="status">{{ message }}</p>
+            {% endfor %}
+
             <!-- Status, manager and dates -->
             <section class="card project-meta">
                 <div class="meta-item">
                     <small>Status</small>
-                    <span class="status progress">In Progress</span>
+                    <span class="status {{ project.status|status_class }}">{{ project.status }}</span>
                 </div>
-                {% if current_role == 'employee' %}
+                <div class="meta-item">
+                    <small>Project Number</small>
+                    {{ project.project_number }}
+                </div>
                 <div class="meta-item">
                     <small>Project Manager</small>
-                    Daniel Carter
+                    {{ project.manager_name or 'Not assigned' }}
                 </div>
-                {% endif %}
                 <div class="meta-item">
                     <small>Start Date</small>
-                    Aug 20, 2026
+                    {{ project.start_date|short_date }}
                 </div>
                 <div class="meta-item">
                     <small>Due Date</small>
-                    Nov 15, 2026
+                    {{ project.due_date|short_date }}
                 </div>
             </section>
 
             <!-- Project overview cards -->
+            {% set budget = project.budget_amount|float %}
+            {% set actual = project.actual_cost|float %}
             <h2 class="section-heading">Project Overview</h2>
             <section class="cards">
-                {% if current_role == 'employee' %}
                 <div class="card summary">
                     <p class="summary-label">Estimated Budget</p>
-                    <p class="summary-value">$48,500</p>
+                    <p class="summary-value">{{ budget|currency }}</p>
                 </div>
                 <div class="card summary">
                     <p class="summary-label">Actual Cost</p>
-                    <p class="summary-value">$31,200</p>
+                    <p class="summary-value">{{ actual|currency }}</p>
                 </div>
                 <div class="card summary">
                     <p class="summary-label">Remaining Budget</p>
-                    <p class="summary-value">$17,300</p>
+                    <p class="summary-value">{{ ('-' if budget < actual else '') ~ ((budget - actual)|abs)|currency }}</p>
                 </div>
-                {% endif %}
                 <div class="card summary">
                     <p class="summary-label">Project Progress</p>
-                    <p class="summary-value">65%</p>
-                    <div class="bar bar-wide"><div class="bar-fill" style="width: 65%;"></div></div>
+                    <p class="summary-value">{{ project.progress_percent }}%</p>
+                    <div class="bar bar-wide"><div class="bar-fill" style="width: {{ project.progress_percent }}%;"></div></div>
                 </div>
             </section>
 
-            <!-- Tabs (switched by project_details.js) -->
-            {% if current_role == 'employee' %}
-            <div class="tabs">
-                <button type="button" class="tab active" data-tab="overview">Overview</button>
-                <button type="button" class="tab" data-tab="costs">Costs</button>
-                <button type="button" class="tab" data-tab="invoices">Invoices</button>
-                <button type="button" class="tab" data-tab="documents">Documents</button>
-                <button type="button" class="tab" data-tab="photos">Photos</button>
-                <button type="button" class="tab" data-tab="schedule">Schedule</button>
-                <button type="button" class="tab" data-tab="subcontractors">Subcontractors</button>
+            <!-- Tabs (switched by project_details.js; ?tab=<name> opens one directly) -->
+            {% set tab_names = [('overview', 'Overview'), ('costs', 'Costs'), ('invoices', 'Invoices (' ~ invoices|length ~ ')'),
+                                ('documents', 'Documents (' ~ documents|length ~ ')'), ('photos', 'Photos (' ~ photos|length ~ ')'),
+                                ('schedule', 'Schedule (' ~ tasks|length ~ ')'), ('subcontractors', 'Subcontractors (' ~ assignments|length ~ ')')] %}
+            <div class="tabs" role="tablist" aria-label="Project sections">
+                {% for key, label in tab_names %}
+                <button type="button" role="tab" id="tab-btn-{{ key }}" aria-controls="tab-{{ key }}"
+                        aria-selected="{{ 'true' if key == active_tab else 'false' }}"
+                        class="tab{% if key == active_tab %} active{% endif %}" data-tab="{{ key }}">{{ label }}</button>
+                {% endfor %}
             </div>
-            {% endif %}
 
-            <!-- ===== OVERVIEW TAB (real content) ===== -->
-            <div id="tab-overview" class="tab-panel active">
+            <!-- ===== OVERVIEW ===== -->
+            <div id="tab-overview" role="tabpanel" aria-labelledby="tab-btn-overview" class="tab-panel{% if active_tab == 'overview' %} active{% endif %}">
                 <div class="grid">
-
-                    <!-- Left column -->
                     <div class="side-column">
-
                         <section class="card">
                             <h2>Project Information</h2>
                             <dl class="info-list">
                                 <dt>Project Type</dt>
-                                <dd>Kitchen Remodel</dd>
+                                <dd>{{ project.project_type or '—' }}</dd>
                                 <dt>Project Description</dt>
-                                <dd>Complete kitchen renovation including new cabinets, countertops, flooring, lighting, and appliance installation.</dd>
+                                <dd>{{ project.description or 'No description entered.' }}</dd>
                                 <dt>Project Address</dt>
-                                <dd>1234 Riverstone Blvd, Houston, TX</dd>
+                                <dd>{{ project.address or '—' }}</dd>
+                                <dt>Client</dt>
+                                <dd>{{ project.client_name }}</dd>
                             </dl>
                         </section>
 
-                        {% if current_role != 'client' %}
+                        {% if estimate %}
                         <section class="card">
-                            <h2>Project Documents</h2>
-                            <ul class="doc-list">
-                                <li><span class="doc-tag">PDF</span> Approved Estimate.pdf</li>
-                                <li><span class="doc-tag">PDF</span> Contract.pdf</li>
-                                <li><span class="doc-tag">PDF</span> Kitchen Plans.pdf</li>
-                            </ul>
-                            <a href="#" class="text-link">View All Documents →</a>
+                            <h2>Source Estimate</h2>
+                            <p>{{ estimate.estimate_number }} · {{ estimate.title }} · <span class="status {{ estimate.status|status_class }}">{{ estimate.status }}</span></p>
+                            <details>
+                                <summary class="text-link">Show {{ estimate.line_items|length }} line items ({{ estimate.total_amount|currency }})</summary>
+                                <table class="estimate-lines">
+                                    <thead><tr><th>Description</th><th>Qty × Unit Cost</th><th class="num">Total</th></tr></thead>
+                                    <tbody>
+                                        {% for li in estimate.line_items %}
+                                        <tr><td>{{ li.description }}</td><td>{{ li.quantity|float|round(2) }} × {{ "$" ~ "{:,.2f}".format(li.unit_cost|float) }}</td><td class="num">{{ li.line_total|currency }}</td></tr>
+                                        {% endfor %}
+                                    </tbody>
+                                </table>
+                            </details>
                         </section>
                         {% endif %}
 
+                        <section class="card">
+                            <h2>Project Documents</h2>
+                            {% if documents %}
+                            <ul class="doc-list">
+                                {% for document in documents[:4] %}
+                                <li><span class="doc-tag">{{ (document.original_filename.rsplit('.', 1)[-1] if '.' in document.original_filename else 'FILE')|upper }}</span>
+                                    {% if document.file_path %}<a class="text-link" href="{{ url_for('download_document', document_id=document.id) }}">{{ document.original_filename }}</a>{% else %}{{ document.original_filename }}{% endif %}</li>
+                                {% endfor %}
+                            </ul>
+                            {% else %}
+                            <p class="muted-note">No documents for this project yet.</p>
+                            {% endif %}
+                            <a href="?tab=documents" class="text-link" data-tab-link="documents">View All Documents →</a>
+                        </section>
                     </div>
 
-                    <!-- Right column -->
                     <div class="side-column">
-
                         <section class="card">
                             <h2>Upcoming Tasks</h2>
+                            {% if upcoming_tasks %}
                             <ul class="task-list">
+                                {% for task in upcoming_tasks %}
                                 <li>
                                     <div class="task-row">
                                         <div>
-                                            <p class="task-name">Cabinet Installation</p>
-                                            <p class="task-meta">Due: Oct 12, 2026</p>
+                                            <p class="task-name">{{ task.name }}</p>
+                                            <p class="task-meta{% if task.overdue %} overdue-date{% endif %}">Due: {{ task.due_date|short_date }}{% if task.overdue %} (overdue){% endif %}</p>
                                         </div>
-                                        <span class="status progress">In Progress</span>
+                                        <span class="status {{ task.status|status_class }}">{{ task.status }}</span>
                                     </div>
                                 </li>
-                                <li>
-                                    <div class="task-row">
-                                        <div>
-                                            <p class="task-name">Countertop Measurement</p>
-                                            <p class="task-meta">Due: Oct 18, 2026</p>
-                                        </div>
-                                        <span class="status pending">Pending</span>
-                                    </div>
-                                </li>
-                                <li>
-                                    <div class="task-row">
-                                        <div>
-                                            <p class="task-name">Electrical Inspection</p>
-                                            <p class="task-meta">Due: Oct 24, 2026</p>
-                                        </div>
-                                        <span class="status pending">Pending</span>
-                                    </div>
-                                </li>
+                                {% endfor %}
                             </ul>
+                            {% else %}
+                            <p class="muted-note">No open tasks.</p>
+                            {% endif %}
+                            <a href="?tab=schedule" class="text-link" data-tab-link="schedule">View Schedule →</a>
                         </section>
 
                         <section class="card">
                             <h2>Recent Activity</h2>
                             <ul class="activity-list">
-                                <li><span class="dot"></span>Progress photos uploaded <small>Oct 3, 2026</small></li>
-                                <li><span class="dot"></span>Invoice #1042 created <small>Oct 1, 2026</small></li>
-                                <li><span class="dot"></span>Receipt uploaded <small>Sep 29, 2026</small></li>
-                                <li><span class="dot"></span>Project status updated <small>Sep 25, 2026</small></li>
+                                {% for event in activity %}
+                                <li><span class="dot"></span>{{ event.text }} <small>{{ event.at|short_date }}</small></li>
+                                {% else %}
+                                <li>No activity yet.</li>
+                                {% endfor %}
                             </ul>
                         </section>
-
                     </div>
                 </div>
             </div>
 
-            <!-- ===== PLACEHOLDER TABS (future development) ===== -->
-            {% if current_role == 'employee' %}
-            <div id="tab-costs" class="tab-panel">
-                <section class="card placeholder">
-                    <h2>Costs</h2>
-                    <p>Coming soon: estimated vs. actual job costs for this project.</p>
+            <!-- ===== COSTS ===== -->
+            <div id="tab-costs" role="tabpanel" aria-labelledby="tab-btn-costs" class="tab-panel{% if active_tab == 'costs' %} active{% endif %}">
+                <section class="card">
+                    <div class="tab-toolbar">
+                        <h2>Cost Breakdown</h2>
+                        <div class="actions"><a class="btn" href="{{ url_for('job_costs', project=project.project_id) }}">Manage in Job Costs</a></div>
+                    </div>
+                    <p class="muted-note">Variance = Actual − Estimated. Estimated amounts come from the project's budget by category (approved estimate).</p>
+                    <div class="table-wrap">
+                        <table>
+                            <thead><tr><th>Cost Category</th><th class="num">Estimated</th><th class="num">Actual</th><th class="num">Variance</th><th>Status</th></tr></thead>
+                            <tbody>
+                                {% for row in costs.rows %}
+                                <tr>
+                                    <td>{{ row.category }}</td>
+                                    <td class="num">{{ row.estimated|currency }}</td>
+                                    <td class="num">{{ row.actual|currency }}</td>
+                                    <td class="num">{{ ('+' if row.variance > 0 else ('-' if row.variance < 0 else '')) ~ (row.variance|abs)|currency }}</td>
+                                    <td>{% if row.variance > 0.005 %}<span class="status over">Over Budget</span>{% elif row.variance < -0.005 %}<span class="status under">Under Budget</span>{% else %}<span class="status on">On Budget</span>{% endif %}</td>
+                                </tr>
+                                {% endfor %}
+                                {% set total_variance = costs.actual_total - costs.estimated_total %}
+                                <tr class="total-row">
+                                    <td>Total</td>
+                                    <td class="num">{{ costs.estimated_total|currency }}</td>
+                                    <td class="num">{{ costs.actual_total|currency }}</td>
+                                    <td class="num">{{ ('+' if total_variance > 0 else ('-' if total_variance < 0 else '')) ~ (total_variance|abs)|currency }}</td>
+                                    <td>{% if total_variance > 0.005 %}<span class="status over">Over Budget</span>{% elif total_variance < -0.005 %}<span class="status under">Under Budget</span>{% else %}<span class="status on">On Budget</span>{% endif %}</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </section>
+                <section class="card">
+                    <h2>Expenses ({{ costs.expenses|length }})</h2>
+                    <div class="table-wrap">
+                        <table>
+                            <thead><tr><th>Date</th><th>Description</th><th>Category</th><th class="num">Amount</th><th>Receipt</th></tr></thead>
+                            <tbody>
+                                {% for e in costs.expenses %}
+                                <tr>
+                                    <td>{{ e.expense_date|short_date }}</td>
+                                    <td>{{ e.description }}{% if e.read_only %} <small class="muted-note">(subcontractor invoice)</small>{% endif %}</td>
+                                    <td>{{ e.category }}</td>
+                                    <td class="num">{{ e.amount|currency }}</td>
+                                    <td>{% if e.has_receipt %}<a class="text-link" href="/api/expenses/{{ e.id }}/receipt" target="_blank" rel="noopener">View</a>{% else %}—{% endif %}</td>
+                                </tr>
+                                {% else %}
+                                <tr class="empty-row"><td colspan="5">No expenses recorded for this project yet.</td></tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
                 </section>
             </div>
-            <div id="tab-invoices" class="tab-panel">
-                <section class="card placeholder">
-                    <h2>Invoices</h2>
-                    <p>Coming soon: invoices and paid/unpaid status for this project.</p>
+
+            <!-- ===== INVOICES ===== -->
+            <div id="tab-invoices" role="tabpanel" aria-labelledby="tab-btn-invoices" class="tab-panel{% if active_tab == 'invoices' %} active{% endif %}">
+                <section class="card">
+                    <div class="tab-toolbar">
+                        <h2>Invoices</h2>
+                        <div class="actions"><a class="btn" href="{{ url_for('invoices', new=1, project=project.project_id) }}">+ New Invoice</a></div>
+                    </div>
+                    <div class="mini-stats">
+                        <div><small>Billed</small><strong>{{ invoice_totals.billed|currency }}</strong></div>
+                        <div><small>Paid</small><strong>{{ invoice_totals.paid|currency }}</strong></div>
+                        <div><small>Unpaid</small><strong>{{ invoice_totals.unpaid|currency }}</strong></div>
+                    </div>
+                    <div class="table-wrap">
+                        <table>
+                            <thead><tr><th>Invoice</th><th>Issued</th><th>Due</th><th class="num">Amount</th><th>Status</th><th>Actions</th></tr></thead>
+                            <tbody>
+                                {% for i in invoices %}
+                                <tr>
+                                    <td>{{ i.invoice_number }}</td>
+                                    <td>{{ i.issue_date|short_date }}</td>
+                                    <td{% if i.overdue %} class="overdue-date"{% endif %}>{{ i.due_date|short_date }}{% if i.overdue %} (overdue){% endif %}</td>
+                                    <td class="num">{{ i.total_amount|currency }}</td>
+                                    <td><span class="status {{ 'hold' if i.overdue else i.status|status_class }}">{{ 'Overdue' if i.overdue else i.status }}</span></td>
+                                    <td><a class="btn-outline" href="{{ url_for('invoices', open=i.invoice_id) }}">Open</a></td>
+                                </tr>
+                                {% else %}
+                                <tr class="empty-row"><td colspan="6">No invoices for this project yet.</td></tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
                 </section>
             </div>
-            <div id="tab-documents" class="tab-panel">
-                <section class="card placeholder">
-                    <h2>Documents</h2>
-                    <p>Coming soon: receipts, contracts, and other files for this project.</p>
+
+            <!-- ===== DOCUMENTS ===== -->
+            <div id="tab-documents" role="tabpanel" aria-labelledby="tab-btn-documents" class="tab-panel{% if active_tab == 'documents' %} active{% endif %}">
+                <section class="card">
+                    <div class="tab-toolbar">
+                        <h2>Documents</h2>
+                        <div class="actions"><a class="btn" href="{{ url_for('upload_document', project=project.project_id, **{'from': 'project'}) }}">Upload Document</a></div>
+                    </div>
+                    <div class="table-wrap">
+                        <table>
+                            <thead><tr><th>Document Name</th><th>Type</th><th>Uploaded By</th><th>Date Added</th><th>Actions</th></tr></thead>
+                            <tbody>
+                                {% for document in documents %}
+                                <tr>
+                                    <td>{% if document.file_path %}<a class="text-link" href="{{ url_for('download_document', document_id=document.id) }}">{{ document.original_filename }}</a>{% else %}{{ document.original_filename }} <small class="muted-note">(sample)</small>{% endif %}</td>
+                                    <td>{{ document.document_type }}</td>
+                                    <td>{{ document.uploaded_by_name or '—' }}</td>
+                                    <td>{{ document.date_added|short_date }}</td>
+                                    <td>
+                                        <form method="POST" action="{{ url_for('delete_document', document_id=document.id) }}" onsubmit="return confirm('Delete this document?');">
+                                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                            <button type="submit" class="btn-outline" aria-label="Delete {{ document.original_filename }}">Delete</button>
+                                        </form>
+                                    </td>
+                                </tr>
+                                {% else %}
+                                <tr class="empty-row"><td colspan="5">No documents for this project yet.</td></tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
                 </section>
             </div>
-            <div id="tab-photos" class="tab-panel">
-                <section class="card placeholder">
-                    <h2>Photos</h2>
-                    <p>Coming soon: project and progress photos.</p>
+
+            <!-- ===== PHOTOS ===== -->
+            <div id="tab-photos" role="tabpanel" aria-labelledby="tab-btn-photos" class="tab-panel{% if active_tab == 'photos' %} active{% endif %}">
+                <section class="card">
+                    <div class="tab-toolbar">
+                        <h2>Progress Photos</h2>
+                        <div class="actions"><a class="btn" href="{{ url_for('upload_photo', project=project.project_id, **{'from': 'project'}) }}">Upload Photo</a></div>
+                    </div>
+                    <div class="photo-grid">
+                        {% for photo in photos %}
+                        <article class="photo-box">
+                            {% if photo.file_path %}
+                            <a href="{{ url_for('photo_image', photo_id=photo.id) }}" target="_blank" rel="noopener">
+                                <img class="photo-preview photo-image" src="{{ url_for('photo_image', photo_id=photo.id) }}" alt="{{ photo.title }}" loading="lazy">
+                            </a>
+                            {% else %}
+                            <div class="photo-preview"><span class="photo-icon" aria-hidden="true">🖼</span> Sample Photo</div>
+                            {% endif %}
+                            <div class="photo-info">
+                                <h3>{{ photo.title }}</h3>
+                                <p><strong>Date Added:</strong> {{ photo.date_added|short_date }}</p>
+                                <p><strong>Uploaded By:</strong> {{ photo.uploaded_by_name or '—' }}</p>
+                                <form method="POST" action="{{ url_for('delete_photo', photo_id=photo.id) }}" onsubmit="return confirm('Delete this photo?');">
+                                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                    <button type="submit" class="btn-outline" aria-label="Delete photo {{ photo.title }}">Delete</button>
+                                </form>
+                            </div>
+                        </article>
+                        {% else %}
+                        <p class="placeholder">No photos for this project yet.</p>
+                        {% endfor %}
+                    </div>
                 </section>
             </div>
-            <div id="tab-schedule" class="tab-panel">
-                <section class="card placeholder">
-                    <h2>Schedule</h2>
-                    <p>Coming soon: tasks and due dates for this project.</p>
+
+            <!-- ===== SCHEDULE ===== -->
+            <div id="tab-schedule" role="tabpanel" aria-labelledby="tab-btn-schedule" class="tab-panel{% if active_tab == 'schedule' %} active{% endif %}">
+                <section class="card">
+                    <div class="tab-toolbar">
+                        <h2>Schedule</h2>
+                        <div class="actions"><a class="btn" href="{{ url_for('schedule', project=project.project_id) }}">Manage Tasks</a></div>
+                    </div>
+                    <div class="table-wrap">
+                        <table>
+                            <thead><tr><th>Task</th><th>Assigned To</th><th>Start</th><th>Due</th><th>Priority</th><th>Status</th></tr></thead>
+                            <tbody>
+                                {% for task in tasks %}
+                                <tr>
+                                    <td><strong>{{ task.name }}</strong>{% if task.description %}<br><small class="muted-note">{{ task.description }}</small>{% endif %}</td>
+                                    <td>{{ task.assigned_to or '—' }}</td>
+                                    <td>{{ task.start_date|short_date }}</td>
+                                    <td{% if task.overdue %} class="overdue-date"{% endif %}>{{ task.due_date|short_date }}{% if task.overdue %} (overdue){% endif %}</td>
+                                    <td>{{ task.priority or '—' }}</td>
+                                    <td><span class="status {{ task.status|status_class }}">{{ task.status }}</span></td>
+                                </tr>
+                                {% else %}
+                                <tr class="empty-row"><td colspan="6">No tasks for this project yet.</td></tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
                 </section>
             </div>
-            <div id="tab-subcontractors" class="tab-panel">
-                <section class="card placeholder">
-                    <h2>Subcontractors</h2>
-                    <p>Coming soon: subcontractors assigned to this project.</p>
+
+            <!-- ===== SUBCONTRACTORS ===== -->
+            <div id="tab-subcontractors" role="tabpanel" aria-labelledby="tab-btn-subcontractors" class="tab-panel{% if active_tab == 'subcontractors' %} active{% endif %}">
+                <section class="card">
+                    <div class="tab-toolbar">
+                        <h2>Assigned Subcontractors</h2>
+                        <div class="actions"><a class="btn-outline" href="{{ url_for('subcontractors') }}">Assign from Subcontractors</a></div>
+                    </div>
+                    <p class="muted-note">To assign or remove a subcontractor, edit them on the Subcontractors page and tick this project.</p>
+                    <div class="table-wrap">
+                        <table>
+                            <thead><tr><th>Company</th><th>Trade</th><th>Contact</th><th>Scope of Work</th><th>Portal Login</th><th>Actions</th></tr></thead>
+                            <tbody>
+                                {% for a in assignments %}
+                                <tr>
+                                    <td><strong>{{ a.company_name }}</strong>{% if a.subcontractor_status == 'Inactive' %} <span class="status planning">Inactive</span>{% endif %}</td>
+                                    <td>{{ a.trade or '—' }}</td>
+                                    <td>{{ a.contact_name or '—' }}{% if a.phone %}<br><small class="muted-note">{{ a.phone }}</small>{% endif %}{% if a.email %}<br><small class="muted-note">{{ a.email }}</small>{% endif %}</td>
+                                    <td>{{ a.scope_of_work or '—' }}</td>
+                                    <td>{{ 'Linked' if a.user_id else 'Not linked' }}</td>
+                                    <td><a class="btn-outline" href="{{ url_for('new_subcontractor', subcontractor_id=a.subcontractor_id) }}">Edit</a></td>
+                                </tr>
+                                {% else %}
+                                <tr class="empty-row"><td colspan="6">No subcontractors assigned to this project yet.</td></tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </section>
+                <section class="card">
+                    <h2>Subcontractor Invoices ({{ sub_invoices|length }})</h2>
+                    <p class="muted-note">Approved and paid invoices count toward this project's actual cost.</p>
+                    <div class="table-wrap">
+                        <table>
+                            <thead><tr><th>Invoice</th><th>Subcontractor</th><th>Submitted</th><th class="num">Amount</th><th>Status</th><th>Actions</th></tr></thead>
+                            <tbody>
+                                {% for i in sub_invoices %}
+                                <tr>
+                                    <td>{% if i.file_path %}<a class="text-link" href="{{ url_for('subcontractor_invoice_file', sub_invoice_id=i.id) }}" target="_blank" rel="noopener">{{ i.invoice_number }}</a>{% else %}{{ i.invoice_number }}{% endif %}
+                                        {% if i.description %}<br><small class="muted-note">{{ i.description }}</small>{% endif %}</td>
+                                    <td>{{ i.company_name }}</td>
+                                    <td>{{ i.submitted_date|short_date }}</td>
+                                    <td class="num">{{ i.amount|currency }}</td>
+                                    <td><span class="status {{ i.status|status_class }}">{{ i.status }}</span></td>
+                                    <td>
+                                        <div class="row-actions">
+                                            {% for next_status in transitions[i.status] %}
+                                            <form method="POST" action="{{ url_for('review_subcontractor_invoice', sub_invoice_id=i.id) }}">
+                                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                                <input type="hidden" name="next" value="{{ url_for('project_details', project_id=project.project_id, tab='subcontractors') }}">
+                                                <button type="submit" name="status" value="{{ next_status }}" class="{{ 'btn' if next_status in ('Approved', 'Paid') and i.status != 'Paid' else 'btn-outline' }}">{{ {'Approved': 'Approve' if i.status == 'Pending Approval' else 'Undo paid', 'Rejected': 'Reject', 'Paid': 'Mark Paid', 'Pending Approval': 'Reopen'}[next_status] }}</button>
+                                            </form>
+                                            {% endfor %}
+                                        </div>
+                                    </td>
+                                </tr>
+                                {% else %}
+                                <tr class="empty-row"><td colspan="6">No subcontractor invoices for this project.</td></tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
                 </section>
             </div>
-            {% endif %}
 
         </main>
     </div>
 </div>
 
-{% if server_project %}<script>window.serverProject = {{ server_project|tojson }};</script>{% endif %}
 <script src="{{ url_for('static', filename='js/project_details.js') }}"></script>
 </body>
 </html>

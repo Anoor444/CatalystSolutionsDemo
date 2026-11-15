@@ -60,7 +60,7 @@
                 </section>
 
                 <div class="form-actions">
-                    <a href="{{ url_for('photos') }}" class="btn-outline">Cancel</a>
+                    <a href="{{ url_for('project_details', project_id=request.args.project|int, tab='photos') if request.args.get('from') == 'project' and request.args.get('project', '')|int else url_for('photos') }}" class="btn-outline">Cancel</a>
                     <button type="submit" class="btn">Upload Photo</button>
                 </div>
             </form>

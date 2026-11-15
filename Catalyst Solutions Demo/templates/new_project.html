@@ -3,8 +3,12 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>New Project | Buff Bison Construction</title>
+    <title>{{ 'Edit ' ~ project.name if project else 'New Project' }} | Buff Bison Construction</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <style>
+        .field-note { display: block; margin-top: 4px; font-size: 12px; color: var(--muted, #6b7280); }
+        input[readonly] { background: #f3f4f6; }
+    </style>
 </head>
 <body>
 <div class="app">
@@ -18,8 +22,8 @@
 
         <header class="header">
             <div>
-                <h1>New Project</h1>
-                <p class="welcome">Create a new construction project</p>
+                <h1>{{ 'Edit Project' if project else 'New Project' }}</h1>
+                <p class="welcome">{{ project.project_number ~ ' · ' ~ project.name if project else 'Create a new construction project' }}</p>
             </div>
             <div class="header-right">
                 <div class="profile">
@@ -31,7 +35,7 @@
 
         <main class="content">
             <!-- Fields marked required are checked by the browser (HTML5 validation) -->
-            <form method="POST" action="{{ url_for('new_project') }}" class="form-page">
+            <form method="POST" action="{{ url_for('edit_project', project_id=project.project_id) if project else url_for('new_project') }}" class="form-page">
                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
 
                 {% if errors %}
@@ -68,6 +72,13 @@
                 <section class="card form-section">
                     <h2>Client Information</h2>
                     <div class="form-grid">
+                        {% if project %}
+                        <div class="form-field">
+                            <label for="client_name">Client</label>
+                            <input type="text" id="client_name" value="{{ project.client_name }}" readonly aria-describedby="client-note">
+                            <small id="client-note" class="field-note">Change client details on the <a class="text-link" href="{{ url_for('clients') }}">Clients</a> page.</small>
+                        </div>
+                        {% else %}
                         <div class="form-field">
                             <label for="client_name">Client Name <span class="required">*</span></label>
                             <input type="text" id="client_name" name="client_name" value="{{ form.get('client_name', '') }}" required>
@@ -80,9 +91,10 @@
                             <label for="client_phone">Client Phone</label>
                             <input type="tel" id="client_phone" name="client_phone" value="{{ form.get('client_phone', '') }}">
                         </div>
+                        {% endif %}
                         <div class="form-field">
-                            <label for="address">Project Address <span class="required">*</span></label>
-                            <input type="text" id="address" name="address" value="{{ form.get('address', '') }}" required>
+                            <label for="address">Project Address{% if not project %} <span class="required">*</span>{% endif %}</label>
+                            <input type="text" id="address" name="address" value="{{ form.get('address', '') }}" {% if not project %}required{% endif %}>
                         </div>
                     </div>
                 </section>
@@ -129,18 +141,25 @@
                         <div class="form-field">
                             <label for="status">Project Status</label>
                             <select id="status" name="status">
-                                {% for status in ['Planning', 'In Progress', 'On Hold'] %}
+                                {% for status in (statuses if project else ['Planning', 'In Progress', 'On Hold']) %}
                                 <option {% if form.get('status', 'Planning') == status %}selected{% endif %}>{{ status }}</option>
                                 {% endfor %}
                             </select>
                         </div>
+                        {% if project %}
+                        <div class="form-field">
+                            <label for="progress">Progress (%)</label>
+                            <input type="number" id="progress" name="progress" min="0" max="100" step="1" value="{{ form.get('progress', '0') }}">
+                            <small class="field-note">Completed projects are saved at 100%.</small>
+                        </div>
+                        {% endif %}
                     </div>
                 </section>
 
                 <!-- Buttons -->
                 <div class="form-actions">
-                    <a href="{{ url_for('projects') }}" class="btn-outline">Cancel</a>
-                    <button type="submit" class="btn">Create Project</button>
+                    <a href="{{ url_for('project_details', project_id=project.project_id) if project else url_for('projects') }}" class="btn-outline">Cancel</a>
+                    <button type="submit" class="btn">{{ 'Save Changes' if project else 'Create Project' }}</button>
                 </div>
 
             </form>
