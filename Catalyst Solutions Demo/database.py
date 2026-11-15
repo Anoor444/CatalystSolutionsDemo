@@ -11,6 +11,7 @@ Database helpers for the Buff Bison Construction Portal.
 Query functions for each page live at the bottom of this file, so app.py
 routes stay short.
 """
+from contextlib import closing
 import os
 import sqlite3
 
@@ -59,7 +60,7 @@ def init_app(app, database_file):
     app.teardown_appcontext(close_db)
     app.cli.add_command(reset_demo_data_command)
 
-    with connect() as connection:
+    with closing(connect()) as connection, connection:  # commit, then close
         # Step 4 replaced the original (never used) tasks table with a fuller one.
         columns = [row[1] for row in connection.execute("PRAGMA table_info(tasks)")]
         if columns and "priority" not in columns and \
@@ -159,15 +160,21 @@ def create_tables(connection):
 @click.command("reset-demo-data")
 def reset_demo_data_command():
     """Delete all business data and reload the sample data (keeps user accounts)."""
+    reset_business_data()
+    click.echo("Sample data reloaded.")
+
+
+def reset_business_data():
+    """Delete all business data and reload the sample data (keeps user accounts).
+    Used by `flask reset-demo-data` and by the automated tests (tests/support.py)."""
     from seed_data import load_sample_data
 
-    with connect() as connection:
+    with closing(connect()) as connection, connection:  # commit, then close
         connection.execute("PRAGMA foreign_keys = OFF")
         for table in BUSINESS_TABLES:
             connection.execute(f"DELETE FROM {table}")
         connection.execute("PRAGMA foreign_keys = ON")
         load_sample_data(connection)
-    click.echo("Sample data reloaded.")
 
 
 # ---------------------------------------------------------------------
