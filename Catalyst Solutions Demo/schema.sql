@@ -190,15 +190,18 @@ CREATE TABLE IF NOT EXISTS tasks (
 
 -- ---------- Files (RTM A10, documents page) ----------
 
+-- Uploaded files are stored in instance/photo_uploads and instance/document_uploads.
+-- file_path is NULL for sample rows that have no real file behind them.
 CREATE TABLE IF NOT EXISTS photos (
-    photo_id     INTEGER PRIMARY KEY,
-    project_id   INTEGER NOT NULL REFERENCES projects(project_id) ON DELETE CASCADE,
-    uploaded_by  INTEGER REFERENCES users(id) ON DELETE SET NULL,
-    task_id      INTEGER REFERENCES tasks(task_id) ON DELETE SET NULL,
-    caption      TEXT,
-    photo_type   TEXT,
-    file_path    TEXT NOT NULL,
-    created_at   TEXT NOT NULL DEFAULT (datetime('now'))
+    photo_id           INTEGER PRIMARY KEY,
+    project_id         INTEGER REFERENCES projects(project_id) ON DELETE CASCADE,
+    uploaded_by        INTEGER REFERENCES users(id) ON DELETE SET NULL,
+    task_id            INTEGER REFERENCES tasks(task_id) ON DELETE SET NULL,
+    title              TEXT NOT NULL,
+    caption            TEXT,
+    original_filename  TEXT,
+    file_path          TEXT,
+    created_at         TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
 CREATE TABLE IF NOT EXISTS documents (
@@ -207,7 +210,7 @@ CREATE TABLE IF NOT EXISTS documents (
     uploaded_by        INTEGER REFERENCES users(id) ON DELETE SET NULL,
     document_type      TEXT NOT NULL CHECK (document_type IN ('Estimate', 'Invoice', 'Receipt', 'Contract', 'Other')),
     original_filename  TEXT NOT NULL,
-    file_path          TEXT NOT NULL,
+    file_path          TEXT,
     created_at         TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
@@ -220,3 +223,5 @@ CREATE INDEX IF NOT EXISTS idx_invoices_project    ON invoices(project_id);
 CREATE INDEX IF NOT EXISTS idx_receipts_project    ON receipts(project_id);
 CREATE INDEX IF NOT EXISTS idx_tasks_project       ON tasks(project_id);
 CREATE INDEX IF NOT EXISTS idx_assignments_project ON project_assignments(project_id);
+CREATE INDEX IF NOT EXISTS idx_photos_project      ON photos(project_id);
+CREATE INDEX IF NOT EXISTS idx_documents_project   ON documents(project_id);

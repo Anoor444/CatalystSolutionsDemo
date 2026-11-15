@@ -100,6 +100,7 @@ def load_sample_data(connection):
     load_task_samples(connection)
     load_cost_samples(connection)
     load_directory_samples(connection)
+    load_file_samples(connection)
 
 
 # ---------------------------------------------------------------------
@@ -400,3 +401,89 @@ def load_directory_samples(connection):
                        VALUES (?, ?, ?, '2026-09-01')""",
                     (row[0], cursor.lastrowid, "Active" if status == "Active" else "Completed"),
                 )
+
+
+# ---------------------------------------------------------------------
+# Sample documents and photos (backend step 7)
+# ---------------------------------------------------------------------
+# These have no file behind them (file_path is NULL), so the pages show them as "Sample".
+# (filename, type, project, date)
+SAMPLE_DOCUMENTS = (
+    ("Kitchen Renovation Estimate.pdf", "Estimate", "Riverstone Kitchen Remodel", "2026-10-12"),
+    ("Roofing Invoice.pdf", "Invoice", "Sugar Land Roof Replacement", "2026-10-14"),
+    ("Material Receipt.pdf", "Receipt", "Riverstone Kitchen Remodel", "2026-10-15"),
+    ("Project Agreement.pdf", "Contract", "Memorial Bathroom Renovation", "2026-10-16"),
+    ("HVAC Installation Estimate.pdf", "Estimate", "Katy Home Addition", "2026-10-17"),
+    ("Cabinet Deposit Invoice.pdf", "Invoice", "Riverstone Kitchen Remodel", "2026-10-18"),
+    ("Tile Purchase Receipt.pdf", "Receipt", "Memorial Bathroom Renovation", "2026-10-19"),
+    ("Roofing Subcontract Agreement.pdf", "Contract", "Sugar Land Roof Replacement", "2026-10-20"),
+    ("Foundation Inspection Report.pdf", "Other", "Katy Home Addition", "2026-10-21"),
+    ("Electrical Materials Receipt.pdf", "Receipt", "Riverstone Kitchen Remodel", "2026-10-22"),
+    ("Bathroom Change Order.docx", "Contract", "Memorial Bathroom Renovation", "2026-10-23"),
+    ("Project Budget Summary.xlsx", "Other", "Katy Home Addition", "2026-10-24"),
+)
+# (title, project, date, uploaded by "employee" or "subcontractor")
+SAMPLE_PHOTOS = (
+    ("Kitchen Progress", "Riverstone Kitchen Remodel", "2026-10-12", "employee"),
+    ("Roof Installation", "Sugar Land Roof Replacement", "2026-10-14", "subcontractor"),
+    ("Bathroom Before Renovation", "Memorial Bathroom Renovation", "2026-10-15", "employee"),
+    ("Flooring Installation", "Riverstone Kitchen Remodel", "2026-10-17", "subcontractor"),
+)
+SAMPLE_UPLOADERS = {"employee": "demo@buffbison.com", "subcontractor": "demo.subcontractor@buffbison.com"}
+
+
+def load_file_samples(connection):
+    def project(name):
+        row = connection.execute("SELECT project_id FROM projects WHERE name = ?", (name,)).fetchone()
+        return row[0] if row else None
+
+    def user(kind):
+        row = connection.execute("SELECT id FROM users WHERE email = ?", (SAMPLE_UPLOADERS[kind],)).fetchone()
+        return row[0] if row else None
+
+    for filename, kind, project_name, day in SAMPLE_DOCUMENTS:
+        connection.execute(
+            """INSERT INTO documents (project_id, uploaded_by, document_type, original_filename, created_at)
+               VALUES (?, ?, ?, ?, ?)""", (project(project_name), user("employee"), kind, filename, f"{day} 09:00:00"))
+    for title, project_name, day, uploader in SAMPLE_PHOTOS:
+        connection.execute(
+            "INSERT INTO photos (project_id, uploaded_by, title, created_at) VALUES (?, ?, ?, ?)",
+            (project(project_name), user(uploader), title, f"{day} 09:00:00"))
+
+
+def import_legacy_file_lists(connection, instance_folder):
+    """Copies documents.json / photos.json (how uploads were listed before step 7) into the tables,
+    then renames the JSON files to *.imported so they are not imported twice."""
+    import json
+    import os
+
+    def project(name):
+        row = connection.execute("SELECT project_id FROM projects WHERE lower(name) = lower(?)", (name or "",)).fetchone()
+        return row[0] if row else None
+
+    for list_name, insert in (
+        ("documents.json", lambda item: connection.execute(
+            """INSERT INTO documents (project_id, document_type, original_filename, file_path, created_at)
+               VALUES (?, ?, ?, ?, ?)""",
+            (project(item.get("project_name")),
+             item.get("document_type") if item.get("document_type") in ("Estimate", "Invoice", "Receipt", "Contract", "Other") else "Other",
+             item.get("filename") or item["stored_filename"], item["stored_filename"],
+             f"{item.get('date_added', '2026-01-01')} 12:00:00"))),
+        ("photos.json", lambda item: connection.execute(
+            """INSERT INTO photos (project_id, uploaded_by, title, original_filename, file_path, created_at)
+               VALUES (?, (SELECT id FROM users WHERE name = ? LIMIT 1), ?, ?, ?, ?)""",
+            (project(item.get("project_name")), item.get("uploaded_by"), item.get("title") or "Photo",
+             item.get("filename"), item["stored_filename"], f"{item.get('date_added', '2026-01-01')} 12:00:00"))),
+    ):
+        path = os.path.join(instance_folder, list_name)
+        if not os.path.exists(path):
+            continue
+        try:
+            with open(path, encoding="utf-8") as handle:
+                items = json.load(handle)
+        except (OSError, ValueError):
+            continue
+        for item in items:
+            if isinstance(item, dict) and item.get("stored_filename"):
+                insert(item)
+        os.replace(path, path + ".imported")
