@@ -290,7 +290,12 @@ function renderExpenseTable(projectId) {
         deleteButton.setAttribute("aria-label", "Delete expense: " + expense.description);
         deleteButton.addEventListener("click", () => deleteExpense(expense.id));
 
-        actionsCell.append(editButton, deleteButton);
+        if (expense.read_only) {
+            // Approved subcontractor invoice: managed on the Subcontractors page.
+            actionsCell.appendChild(createElementWithText("span", "Subcontractor invoice", "muted-tag"));
+        } else {
+            actionsCell.append(editButton, deleteButton);
+        }
         row.appendChild(actionsCell);
         expenseBody.appendChild(row);
     });

@@ -5,7 +5,7 @@
         <span class="brand-sub">CONSTRUCTION</span>
     </div>
     <nav class="nav" aria-label="Main navigation">
-        {% for endpoint, page, label, symbol in [('dashboard', 'dashboard', 'Dashboard', '&#8962;'), ('projects', 'projects', 'My Assigned Projects', '&#9635;'), ('photos', 'photos', 'Progress Photos', '&#9689;'), ('subcontractor_invoices', 'invoices', 'My Invoices', '$')] %}
+        {% for endpoint, page, label, symbol in [('dashboard', 'dashboard', 'Dashboard', '&#8962;'), ('projects', 'projects', 'My Assigned Projects', '&#9635;'), ('photos', 'photos', 'Progress Photos', '&#9689;'), ('documents', 'documents', 'Documents', '&#9645;'), ('subcontractor_invoices', 'invoices', 'My Invoices', '$')] %}
         <a href="{{ url_for(endpoint) }}" class="nav-link {% if active_page == page %}active{% endif %}" {% if active_page == page %}aria-current="page"{% endif %}><span class="icon" aria-hidden="true">{{ symbol|safe }}</span> {{ label }}</a>
         {% endfor %}
     </nav>

@@ -85,6 +85,14 @@ def init_app(app, database_file):
                     connection.execute("DROP TABLE documents")
             files_are_new = True
 
+        # Step 8: subcontractor_invoices gets description/review/file columns. It was never
+        # used before (always empty), so it is rebuilt.
+        sub_invoice_columns = [row[1] for row in connection.execute("PRAGMA table_info(subcontractor_invoices)")]
+        sub_invoices_are_new = not sub_invoice_columns or "description" not in sub_invoice_columns
+        if sub_invoice_columns and sub_invoices_are_new and \
+                connection.execute("SELECT COUNT(*) FROM subcontractor_invoices").fetchone()[0] == 0:
+            connection.execute("DROP TABLE subcontractor_invoices")
+
         costs_are_new = not connection.execute(
             "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'project_budget_items'").fetchone()
 
@@ -106,7 +114,8 @@ def init_app(app, database_file):
                     directory_upgraded = True
 
         from seed_data import (import_legacy_file_lists, load_billing_samples, load_cost_samples,
-                               load_directory_samples, load_file_samples, load_sample_data, load_task_samples)
+                               load_directory_samples, load_file_samples, load_sample_data,
+                               load_subcontractor_invoice_samples, load_task_samples)
 
         def count(table):
             return connection.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]
@@ -124,6 +133,8 @@ def init_app(app, database_file):
                 load_directory_samples(connection)  # database from before step 6: client details, subcontractors
             if files_are_new:
                 load_file_samples(connection)       # database from before step 7: sample documents/photos
+            if sub_invoices_are_new:
+                load_subcontractor_invoice_samples(connection)  # database from before step 8
         if files_are_new:
             # Anything uploaded before step 7 was listed in instance/documents.json and photos.json.
             import_legacy_file_lists(connection, os.path.dirname(DATABASE_FILE))
@@ -692,8 +703,26 @@ def get_job_cost_data():
         "estimates": [dict(r) for r in db.execute(
             """SELECT b.project_id, c.name AS category, CAST(b.estimated_amount AS REAL) AS estimated_amount
                FROM project_budget_items b JOIN cost_categories c ON c.category_id = b.category_id""")],
-        "expenses": get_expenses(),
+        "expenses": get_expenses() + approved_subcontractor_costs(),
     }
+
+
+def approved_subcontractor_costs(project_id=None):
+    """Approved/paid subcontractor invoices, shaped like expenses (read-only on Job Costs).
+    Projects' Actual Cost already includes them, so Job Costs shows them too."""
+    sql = """SELECT 'sub-' || si.sub_invoice_id AS id, pa.project_id, date(si.submitted_at, 'localtime') AS expense_date,
+                    s.company_name || ' invoice ' || si.invoice_number AS description,
+                    COALESCE(c.name, 'Subcontractor') AS category, CAST(si.amount AS REAL) AS amount,
+                    NULL AS receipt_name, 0 AS has_receipt, 1 AS read_only
+             FROM subcontractor_invoices si
+             JOIN project_assignments pa ON pa.assignment_id = si.assignment_id
+             JOIN subcontractors s ON s.subcontractor_id = pa.subcontractor_id
+             LEFT JOIN cost_categories c ON c.category_id = si.category_id
+             WHERE si.status IN ('Approved', 'Paid')"""
+    params = ()
+    if project_id is not None:
+        sql, params = sql + " AND pa.project_id = ?", (project_id,)
+    return [dict(row, has_receipt=False, read_only=True) for row in get_db().execute(sql, params)]
 
 
 def category_id_for(name):
@@ -961,3 +990,136 @@ def delete_file_record(table, file_id):
     with db:
         db.execute(f"DELETE FROM {table} WHERE {key} = ?", (file_id,))
     return row["file_path"]
+
+
+# ---------------------------------------------------------------------
+# Client and subcontractor portals (step 8)
+# ---------------------------------------------------------------------
+# Every function takes the logged-in user's id and only returns that user's records.
+
+def client_for_user(user_id):
+    return get_db().execute("SELECT * FROM clients WHERE user_id = ?", (user_id,)).fetchone()
+
+
+def subcontractor_for_user(user_id):
+    return get_db().execute("SELECT * FROM subcontractors WHERE user_id = ?", (user_id,)).fetchone()
+
+
+def portal_projects(user_id, role):
+    allowed = accessible_project_ids(user_id, role)
+    return [project for project in get_projects() if allowed is None or project["project_id"] in allowed]
+
+
+def portal_project(project_id, user_id, role):
+    """The project if this login may see it, otherwise None."""
+    allowed = accessible_project_ids(user_id, role)
+    if allowed is not None and project_id not in allowed:
+        return None
+    return get_project(project_id)
+
+
+# ----- Client: estimates and invoices -----
+def client_estimates(user_id):
+    """Estimates for this client's account, without drafts (those are still being written)."""
+    client = client_for_user(user_id)
+    if client is None:
+        return []
+    return [e for e in get_estimates() if e["client_id"] == client["client_id"] and e["status"] != "Draft"]
+
+
+def client_decide_estimate(user_id, estimate_id, decision):
+    """Client approves or rejects an estimate that was sent to them."""
+    estimate = next((e for e in client_estimates(user_id) if e["estimate_id"] == estimate_id), None)
+    if estimate is None:
+        raise RuleError("Estimate not found.", 404)
+    if estimate["status"] != "Sent":
+        raise RuleError("This estimate has already been answered.", 409)
+    return set_estimate_status(estimate_id, "Approved" if decision == "approve" else "Rejected")
+
+
+def client_invoices(user_id):
+    allowed = accessible_project_ids(user_id, "client")
+    return [i for i in get_invoices() if i["project_id"] in allowed and i["status"] != "Draft"]
+
+
+def client_invoice(user_id, invoice_id):
+    return next((i for i in client_invoices(user_id) if i["invoice_id"] == invoice_id), None)
+
+
+# ----- Subcontractor: tasks and invoices -----
+def subcontractor_update_task(user_id, task_id, status):
+    task = get_task(task_id)
+    if task["project_id"] not in accessible_project_ids(user_id, "subcontractor"):
+        raise RuleError("Task not found.", 404)
+    if status not in TASK_STATUSES:
+        raise RuleError("Choose a valid status.")
+    return set_task_status(task_id, status)
+
+
+_SUB_INVOICE_SELECT = """
+    SELECT si.*, si.sub_invoice_id AS id, date(si.submitted_at, 'localtime') AS submitted_date, p.project_id, p.name AS project_name, s.subcontractor_id,
+           s.company_name, s.contact_name, c.name AS category_name, u.name AS reviewed_by_name
+    FROM subcontractor_invoices si
+    JOIN project_assignments pa ON pa.assignment_id = si.assignment_id
+    JOIN projects p ON p.project_id = pa.project_id
+    JOIN subcontractors s ON s.subcontractor_id = pa.subcontractor_id
+    LEFT JOIN cost_categories c ON c.category_id = si.category_id
+    LEFT JOIN users u ON u.id = si.reviewed_by
+"""
+
+
+def get_subcontractor_invoices(subcontractor_id=None, project_id=None):
+    sql, params = _SUB_INVOICE_SELECT + " WHERE 1 = 1", []
+    if subcontractor_id is not None:
+        sql += " AND s.subcontractor_id = ?"
+        params.append(subcontractor_id)
+    if project_id is not None:
+        sql += " AND p.project_id = ?"
+        params.append(project_id)
+    sql += " ORDER BY CASE si.status WHEN 'Pending Approval' THEN 0 ELSE 1 END, si.submitted_at DESC"
+    return get_db().execute(sql, params).fetchall()
+
+
+def get_subcontractor_invoice(sub_invoice_id):
+    return get_db().execute(_SUB_INVOICE_SELECT + " WHERE si.sub_invoice_id = ?", (sub_invoice_id,)).fetchone()
+
+
+def subcontractor_assignment(user_id, project_id):
+    return get_db().execute(
+        """SELECT pa.assignment_id FROM project_assignments pa
+           JOIN subcontractors s ON s.subcontractor_id = pa.subcontractor_id
+           WHERE s.user_id = ? AND pa.project_id = ?""", (user_id, project_id)).fetchone()
+
+
+def submit_subcontractor_invoice(assignment_id, data):
+    db = get_db()
+    with db:
+        return db.execute(
+            """INSERT INTO subcontractor_invoices (assignment_id, category_id, invoice_number, description, amount,
+                                                  original_filename, file_path)
+               VALUES (?, (SELECT category_id FROM cost_categories WHERE name = 'Subcontractor'), ?, ?, ?, ?, ?)""",
+            (assignment_id, data["invoice_number"], data["description"] or None, data["amount"],
+             data.get("original_filename"), data.get("file_path"))).lastrowid
+
+
+# status an employee can move a subcontractor invoice to, from its current status
+SUB_INVOICE_TRANSITIONS = {
+    "Pending Approval": ("Approved", "Rejected"),
+    "Approved": ("Paid", "Pending Approval"),
+    "Rejected": ("Pending Approval",),
+    "Paid": ("Approved",),
+}
+
+
+def review_subcontractor_invoice(sub_invoice_id, new_status, reviewer_id):
+    invoice = get_subcontractor_invoice(sub_invoice_id)
+    if invoice is None:
+        raise RuleError("Invoice not found.", 404)
+    if new_status not in SUB_INVOICE_TRANSITIONS.get(invoice["status"], ()):
+        raise RuleError(f"Can't change a {invoice['status'].lower()} invoice to {new_status.lower()}.", 409)
+    db = get_db()
+    with db:
+        db.execute(
+            """UPDATE subcontractor_invoices SET status = ?, reviewed_by = ?, reviewed_at = datetime('now')
+               WHERE sub_invoice_id = ?""", (new_status, reviewer_id, sub_invoice_id))
+    return get_subcontractor_invoice(sub_invoice_id)

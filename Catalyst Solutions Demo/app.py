@@ -48,109 +48,6 @@ ALLOWED_DOCUMENT_EXTENSIONS = {"csv", "doc", "docx", "pdf", "txt", "xls", "xlsx"
 ALLOWED_PHOTO_EXTENSIONS = {"jpg", "jpeg", "png", "gif", "webp"}
 DOCUMENT_TYPES = ("Estimate", "Invoice", "Receipt", "Contract", "Other")
 ROLES = ("employee", "subcontractor", "client")
-CLIENT_PROJECT_NAME = "Riverstone Kitchen Remodel"
-SAMPLE_CLIENT_PROJECTS = (
-    {
-        "project": "Cabinet Installation",
-        "status": "In Progress",
-        "progress": 65,
-        "due_date": "November 15, 2026",
-    },
-    {
-        "project": "Countertop Installation",
-        "status": "In Progress",
-        "progress": 55,
-        "due_date": "November 10, 2026",
-    },
-    {
-        "project": "Flooring Installation",
-        "status": "Planning",
-        "progress": 10,
-        "due_date": "November 12, 2026",
-    },
-    {
-        "project": "Electrical and Lighting",
-        "status": "In Progress",
-        "progress": 48,
-        "due_date": "November 15, 2026",
-    },
-)
-SAMPLE_CLIENT_ESTIMATES = (
-    {
-        "estimate": "Kitchen Remodel Estimate",
-        "project": "Riverstone Kitchen Remodel",
-        "date": "October 12, 2026",
-        "amount": "$48,500",
-        "status": "Pending Review",
-    },
-    {
-        "estimate": "Countertop Installation Estimate",
-        "project": CLIENT_PROJECT_NAME,
-        "date": "October 14, 2026",
-        "amount": "$7,500",
-        "status": "Approved",
-    },
-)
-SAMPLE_CLIENT_INVOICES = (
-    {
-        "invoice": "Invoice #1042",
-        "project": "Riverstone Kitchen Remodel",
-        "date": "October 15, 2026",
-        "amount": "$8,250",
-        "status": "Due November 15, 2026",
-    },
-    {
-        "invoice": "Invoice #1038",
-        "project": CLIENT_PROJECT_NAME,
-        "date": "October 10, 2026",
-        "amount": "$4,100",
-        "status": "Paid",
-    },
-)
-
-SAMPLE_SUBCONTRACTOR_PROJECTS = (
-    {
-        "project": "Riverstone Kitchen Remodel",
-        "status": "In Progress",
-        "progress": 65,
-        "due_date": "November 15, 2026",
-    },
-    {
-        "project": "Sugar Land Roof Replacement",
-        "status": "In Progress",
-        "progress": 80,
-        "due_date": "November 6, 2026",
-    },
-    {
-        "project": "Memorial Bathroom Renovation",
-        "status": "Planning",
-        "progress": 10,
-        "due_date": "November 24, 2026",
-    },
-)
-SAMPLE_SUBCONTRACTOR_INVOICES = (
-    {
-        "invoice": "Invoice #SC-2026-101",
-        "project": "Riverstone Kitchen Remodel",
-        "date": "October 28, 2026",
-        "amount": "$4,800",
-        "status": "Pending Approval",
-    },
-    {
-        "invoice": "Invoice #SC-2026-102",
-        "project": "Sugar Land Roof Replacement",
-        "date": "October 30, 2026",
-        "amount": "$6,250",
-        "status": "Approved - Payment Pending",
-    },
-    {
-        "invoice": "Invoice #SC-2026-098",
-        "project": "Riverstone Kitchen Remodel",
-        "date": "October 16, 2026",
-        "amount": "$2,400",
-        "status": "Paid",
-    },
-)
 
 os.makedirs(app.instance_path, exist_ok=True)
 secret_key_file = os.path.join(app.instance_path, ".secret_key")
@@ -261,7 +158,7 @@ def provide_template_security_helpers():
             session["csrf_token"] = secrets.token_urlsafe(32)
         return session["csrf_token"]
 
-    return {"csrf_token": csrf_token, "current_role": session.get("role"), "client_project_name": CLIENT_PROJECT_NAME}
+    return {"csrf_token": csrf_token, "current_role": session.get("role")}
 
 
 @app.cli.command("create-user")
@@ -342,32 +239,35 @@ def home():
 @role_required(*ROLES)
 def dashboard():
     if session["role"] == "subcontractor":
+        projects = database.portal_projects(session["user_id"], "subcontractor")
+        project_ids = {project["project_id"] for project in projects}
+        me = database.subcontractor_for_user(session["user_id"])
+        invoices = database.get_subcontractor_invoices(me["subcontractor_id"]) if me else []
+        today = date.today().isoformat()
+        tasks = [dict(task, overdue=task["due_date"] < today)
+                 for task in database.get_open_tasks() if task["project_id"] in project_ids]
         return render_template(
             "subcontractor.dashboard.html",
             user_name=session["user"],
-            projects=SAMPLE_SUBCONTRACTOR_PROJECTS,
-            open_invoices=tuple(
-                invoice for invoice in SAMPLE_SUBCONTRACTOR_INVOICES
-                if invoice["status"] != "Paid"
-            ),
+            linked=me is not None,
+            projects=projects,
+            tasks=tasks,
+            pending_invoices=[i for i in invoices if i["status"] == "Pending Approval"],
+            invoices=invoices,
         )
     if session["role"] == "client":
-        pending_estimates = tuple(
-            estimate
-            for estimate in SAMPLE_CLIENT_ESTIMATES
-            if estimate["status"] == "Pending Review"
-        )
-        open_invoices = tuple(
-            invoice
-            for invoice in SAMPLE_CLIENT_INVOICES
-            if invoice["status"] != "Paid"
-        )
+        estimates = database.client_estimates(session["user_id"])
+        invoices = database.client_invoices(session["user_id"])
+        today = date.today().isoformat()
+        open_invoices = [dict(i, overdue=i["due_date"] < today) for i in invoices if i["status"] == "Unpaid"]
         return render_template(
             "client.dashboard.html",
             user_name=session["user"],
-            projects=SAMPLE_CLIENT_PROJECTS,
-            pending_estimates=pending_estimates,
+            client=database.client_for_user(session["user_id"]),
+            projects=database.portal_projects(session["user_id"], "client"),
+            pending_estimates=[e for e in estimates if e["status"] == "Sent"],
             open_invoices=open_invoices,
+            open_total=sum(float(i["total_amount"]) for i in open_invoices),
         )
     dashboard_data = database.get_dashboard()
     return render_template(
@@ -396,17 +296,11 @@ def get_upcoming_tasks(limit=6):
 @app.route("/projects")
 @role_required(*ROLES)
 def projects():
-    if session["role"] == "subcontractor":
+    if session["role"] in ("subcontractor", "client"):
         return render_template(
             "my_projects.html",
             user_name=session["user"],
-            projects=SAMPLE_SUBCONTRACTOR_PROJECTS,
-        )
-    if session["role"] == "client":
-        return render_template(
-            "my_projects.html",
-            user_name=session["user"],
-            projects=SAMPLE_CLIENT_PROJECTS,
+            projects=database.portal_projects(session["user_id"], session["role"]),
         )
     return render_template(
         "projects.html",
@@ -446,13 +340,16 @@ def schedule():
     )
 
 
+# ---------- Client portal ----------
+# Clients only ever see records for their own client account (database.client_*).
+
 @app.route("/client/my-projects")
 @role_required("client")
 def client_my_projects():
     return render_template(
         "my_projects.html",
         user_name=session["user"],
-        projects=SAMPLE_CLIENT_PROJECTS,
+        projects=database.portal_projects(session["user_id"], "client"),
     )
 
 
@@ -463,45 +360,154 @@ def client_estimates():
         "client_records.html",
         user_name=session["user"],
         active_page="estimates",
+        kind="client_estimates",
         page_title="Estimates",
-        page_description="Review estimates for your Riverstone Kitchen Remodel assignments.",
-        records=SAMPLE_CLIENT_ESTIMATES,
-        first_column="Estimate",
-        first_value="estimate",
-        records_label="Your Estimates",
+        page_description="Review the estimates Buff Bison has sent you and approve or decline them.",
+        records=database.client_estimates(session["user_id"]),
+        linked=database.client_for_user(session["user_id"]) is not None,
     )
+
+
+@app.route("/client/estimates/<int:estimate_id>/decision", methods=["POST"])
+@role_required("client")
+def client_estimate_decision(estimate_id):
+    decision = request.form.get("decision")
+    if decision not in ("approve", "reject"):
+        abort(400)
+    try:
+        database.client_decide_estimate(session["user_id"], estimate_id, decision)
+    except database.RuleError as error:
+        if error.status_code == 404:
+            abort(404)
+        flash(error.message)
+    else:
+        flash("Thank you. The estimate was approved." if decision == "approve" else "The estimate was declined.")
+    return redirect(url_for("client_estimates"))
 
 
 @app.route("/client/invoices")
 @role_required("client")
 def client_invoices():
+    today = date.today().isoformat()
+    records = [dict(i, overdue=i["status"] == "Unpaid" and i["due_date"] < today)
+               for i in database.client_invoices(session["user_id"])]
     return render_template(
         "client_records.html",
         user_name=session["user"],
         active_page="invoices",
+        kind="client_invoices",
         page_title="Invoices",
-        page_description="Review invoices for your Riverstone Kitchen Remodel assignments.",
-        records=SAMPLE_CLIENT_INVOICES,
-        first_column="Invoice",
-        first_value="invoice",
-        records_label="Your Invoices",
+        page_description="Invoices for your projects. Open one to view or print it.",
+        records=records,
+        linked=database.client_for_user(session["user_id"]) is not None,
     )
 
 
-@app.route("/subcontractor/invoices")
+@app.route("/client/invoices/<int:invoice_id>")
+@role_required("client")
+def client_invoice(invoice_id):
+    invoice = database.client_invoice(session["user_id"], invoice_id)
+    if invoice is None:
+        abort(404)
+    return render_template("portal_invoice.html", user_name=session["user"], invoice=invoice,
+                           overdue=invoice["status"] == "Unpaid" and invoice["due_date"] < date.today().isoformat())
+
+
+# ---------- Subcontractor portal ----------
+# Subcontractors only see projects they are assigned to and their own invoices.
+SUB_INVOICE_EXTENSIONS = {"pdf", "jpg", "jpeg", "png"}
+SUB_INVOICE_UPLOAD_FOLDER = os.path.join(app.instance_path, "subcontractor_invoice_uploads")
+
+
+@app.route("/subcontractor/invoices", methods=["GET", "POST"])
 @role_required("subcontractor")
 def subcontractor_invoices():
+    me = database.subcontractor_for_user(session["user_id"])
+    projects = database.portal_projects(session["user_id"], "subcontractor")
+    errors, values = [], {}
+    if request.method == "POST" and me is not None:
+        values = request.form
+        project_id, project_error = _chosen_project(request.form, projects, required=True)
+        number = request.form.get("invoice_number", "").strip()
+        description = request.form.get("description", "").strip()
+        if project_error:
+            errors.append(project_error)
+        if not number or len(number) > 50:
+            errors.append("Enter your invoice number (up to 50 characters).")
+        if len(description) > 300:
+            errors.append("Description must be 300 characters or fewer.")
+        try:
+            amount = round(float(request.form.get("amount", "")), 2)
+            if not 0 < amount <= 10_000_000:
+                raise ValueError
+        except ValueError:
+            errors.append("Enter an amount greater than $0.00.")
+            amount = 0
+        data = {"invoice_number": number, "description": description, "amount": amount}
+        upload = request.files.get("invoice_file")
+        if not errors and upload and upload.filename:
+            try:
+                data["original_filename"], data["file_path"] = _save_upload(
+                    upload, SUB_INVOICE_UPLOAD_FOLDER, SUB_INVOICE_EXTENSIONS)
+            except ValueError:
+                errors.append("Attach a PDF, JPG or PNG file (or leave it empty).")
+        if not errors:
+            assignment = database.subcontractor_assignment(session["user_id"], project_id)
+            database.submit_subcontractor_invoice(assignment["assignment_id"], data)
+            flash(f"Invoice {number} was submitted for approval.")
+            return redirect(url_for("subcontractor_invoices"))
     return render_template(
         "client_records.html",
         user_name=session["user"],
         active_page="invoices",
+        kind="subcontractor_invoices",
         page_title="My Invoices",
-        page_description="Review invoices for your assigned projects.",
-        records=SAMPLE_SUBCONTRACTOR_INVOICES,
-        first_column="Invoice",
-        first_value="invoice",
-        records_label="Your Invoices",
+        page_description="Submit invoices for your assigned projects and track their approval.",
+        records=database.get_subcontractor_invoices(me["subcontractor_id"]) if me else [],
+        linked=me is not None,
+        projects=projects,
+        errors=errors,
+        values=values,
     )
+
+
+@app.route("/subcontractor-invoices/<int:sub_invoice_id>/file")
+@role_required("employee", "subcontractor")
+def subcontractor_invoice_file(sub_invoice_id):
+    invoice = database.get_subcontractor_invoice(sub_invoice_id)
+    if invoice is None or not invoice["file_path"]:
+        abort(404)
+    if session["role"] == "subcontractor":
+        me = database.subcontractor_for_user(session["user_id"])
+        if me is None or me["subcontractor_id"] != invoice["subcontractor_id"]:
+            abort(404)
+    return send_from_directory(SUB_INVOICE_UPLOAD_FOLDER, invoice["file_path"],
+                               download_name=invoice["original_filename"] or invoice["file_path"])
+
+
+@app.route("/subcontractor-invoices/<int:sub_invoice_id>/review", methods=["POST"])
+@role_required("employee")
+def review_subcontractor_invoice(sub_invoice_id):
+    try:
+        invoice = database.review_subcontractor_invoice(
+            sub_invoice_id, request.form.get("status", ""), session["user_id"])
+        flash(f"Invoice {invoice['invoice_number']} from {invoice['company_name']} marked {invoice['status'].lower()}.")
+    except database.RuleError as error:
+        flash(error.message)
+    return redirect(url_for("subcontractors") + "#sub-invoices")
+
+
+@app.route("/project/<int:project_id>/tasks/<int:task_id>/status", methods=["POST"])
+@role_required("subcontractor")
+def subcontractor_task_status(project_id, task_id):
+    try:
+        task = database.subcontractor_update_task(session["user_id"], task_id, request.form.get("status", ""))
+        flash(f"Updated \"{task['name']}\" to {task['status']}.")
+    except database.RuleError as error:
+        if error.status_code == 404:
+            abort(404)
+        flash(error.message)
+    return redirect(url_for("project_details", project_id=project_id))
 
 
 @app.route("/new-project", methods=["GET", "POST"])
@@ -586,22 +592,23 @@ def validate_new_project(form, managers):
 @app.route("/project/<int:project_id>")
 @role_required(*ROLES)
 def project_details(project_id):
-    if session["role"] == "subcontractor":
-        if not 1 <= project_id <= len(SAMPLE_SUBCONTRACTOR_PROJECTS):
+    if session["role"] in ("subcontractor", "client"):
+        project = database.portal_project(project_id, session["user_id"], session["role"])
+        if project is None:
             abort(404)
-        return render_template(
-            "client_assignment.html",
-            user_name=session["user"],
-            assignment=SAMPLE_SUBCONTRACTOR_PROJECTS[project_id - 1],
-        )
-    if session["role"] == "client":
-        if not 1 <= project_id <= len(SAMPLE_CLIENT_PROJECTS):
-            abort(404)
-        return render_template(
-            "client_assignment.html",
-            user_name=session["user"],
-            assignment=SAMPLE_CLIENT_PROJECTS[project_id - 1],
-        )
+        today = date.today().isoformat()
+        context = {"project": project, "tasks": [dict(t, overdue=t["status"] != "Completed" and t["due_date"] < today)
+                                                 for t in database.get_tasks(project_id)]}
+        if session["role"] == "client":
+            context["estimates"] = [e for e in database.client_estimates(session["user_id"])
+                                    if e.get("project_id") == project_id]
+            context["invoices"] = [dict(i, overdue=i["status"] == "Unpaid" and i["due_date"] < today)
+                                   for i in database.client_invoices(session["user_id"]) if i["project_id"] == project_id]
+        else:
+            me = database.subcontractor_for_user(session["user_id"])
+            context["invoices"] = database.get_subcontractor_invoices(me["subcontractor_id"], project_id) if me else []
+            context["task_statuses"] = database.TASK_STATUSES
+        return render_template("client_assignment.html", user_name=session["user"], **context)
     project = database.get_project(project_id)
     if project is None:
         abort(404)
@@ -614,7 +621,7 @@ def project_details(project_id):
         "due": project["due_date"] or "", "description": project["description"] or "",
         "address": project["address"] or "", "subcontractors": [],
         "tasks": database.get_tasks(project_id),
-        "expenses": database.get_expenses(project_id),
+        "expenses": database.get_expenses(project_id) + database.approved_subcontractor_costs(project_id),
     }
     return render_template("project_details.html", user_name=session["user"], server_project=server_project)
 
@@ -649,7 +656,9 @@ def _check_email(value, label, errors, required=False):
 @role_required("employee")
 def subcontractors():
     return render_template("subcontractors.html", user_name=session["user"],
-                           subcontractors=database.get_subcontractors())
+                           subcontractors=database.get_subcontractors(),
+                           sub_invoices=database.get_subcontractor_invoices(),
+                           transitions=database.SUB_INVOICE_TRANSITIONS)
 
 
 @app.route("/subcontractors/new", methods=["GET", "POST"], defaults={"subcontractor_id": None})
