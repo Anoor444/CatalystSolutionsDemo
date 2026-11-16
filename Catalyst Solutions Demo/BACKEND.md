@@ -28,6 +28,33 @@ python -m flask --app app create-user      # add a login account
 
 To start completely fresh, stop the app, delete the `instance` folder and run `python app.py`. Note that this also deletes uploaded documents and photos.
 
+## Forgot password
+
+1. **Forgot Password?** on the sign-in page asks for an email address. The page always says the same thing, so it can't be used to find out which emails have accounts. Each address gets at most one email a minute.
+2. If the account exists, it gets a link like `/reset-password/<token>`. The token is signed with the app's secret key and holds the user id plus a fingerprint of the current password. It expires after 30 minutes (`RESET_LINK_MINUTES` in `app.py`) and stops working once the password changes, so each link works once.
+3. The link opens a page to choose a new password (same rules as Change Password: 12–128 characters). Afterwards the user goes back to sign in.
+
+**Without email settings (the default)**, the link is printed in the terminal running `python app.py`:
+
+```
+[password reset] Link for demo.client@buffbison.com: http://127.0.0.1:5000/reset-password/...
+```
+
+That's how to demo it: the demo accounts' emails aren't real inboxes.
+
+**To actually send emails**, set these before starting the app (PowerShell example for Gmail, which needs an [app password](https://support.google.com/accounts/answer/185833), not your normal password):
+
+```powershell
+$env:MAIL_SERVER="smtp.gmail.com"
+$env:MAIL_PORT="587"
+$env:MAIL_USERNAME="yourteam@gmail.com"
+$env:MAIL_PASSWORD="your-16-letter-app-password"
+$env:MAIL_FROM="Buff Bison <yourteam@gmail.com>"
+python app.py
+```
+
+`MAIL_USE_TLS` defaults to `true`. Never commit these values. If sending fails, the error is logged in the terminal and the page still shows the usual message.
+
 ## Running the tests
 
 From the `Catalyst Solutions Demo` folder:
@@ -36,7 +63,7 @@ From the `Catalyst Solutions Demo` folder:
 python -m unittest discover -s tests -v
 ```
 
-About 70 tests, roughly 30 seconds. They run the app against a **temporary** database and upload folder, so your real data in `instance/` is never touched, and every test starts from fresh sample data. `pytest tests` works too if you have pytest installed.
+About 80 tests, roughly 30 seconds. They run the app against a **temporary** database and upload folder, so your real data in `instance/` is never touched, and every test starts from fresh sample data. `pytest tests` works too if you have pytest installed.
 
 | File | Covers |
 |---|---|
@@ -47,6 +74,7 @@ About 70 tests, roughly 30 seconds. They run the app against a **temporary** dat
 | `tests/test_portals.py` | Client and subcontractor portals, subcontractor invoice approval |
 | `tests/test_project_page.py` | Employee project page tabs, Edit Project |
 | `tests/test_search.py` | Search, demo client estimate |
+| `tests/test_forgot_password.py` | Forgot password: reset links, expiry, one-time use, email sending |
 | `tests/test_password_change.py` | Changing passwords (all roles) |
 | `tests/support.py` | Shared setup (temporary database, logins, helpers) — not a test file |
 
