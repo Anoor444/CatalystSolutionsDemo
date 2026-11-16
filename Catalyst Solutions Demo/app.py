@@ -1,8 +1,13 @@
 # cd ".\CatalystSolutionsDemo\Catalyst Solutions Demo"; python app.py
+import hashlib
+import hmac
 import json
 import os
 import secrets
+import smtplib
+import time
 import click
+from email.message import EmailMessage
 from functools import wraps
 from datetime import date
 from uuid import uuid4
@@ -19,6 +24,7 @@ from flask import (
     session,
     url_for,
 )
+from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
 from werkzeug.security import check_password_hash, generate_password_hash
 from werkzeug.utils import secure_filename
 
@@ -222,22 +228,127 @@ def login():
     return render_template("login.html", error=error)
 
 
+# ---------- Forgot password (step 12) ----------
+# The reset link carries a signed token (itsdangerous, part of Flask) holding the user id and a
+# fingerprint of their current password hash. It expires after RESET_LINK_MINUTES, and it stops
+# working as soon as the password changes, so each link can be used once. No table is needed,
+# so it works with both account backends (SQLite and MySQL).
+#
+# Email is sent through SMTP when MAIL_SERVER is set (see BACKEND.md). Without it, the link is
+# printed in the terminal running the app, which is enough for local demos.
+RESET_LINK_MINUTES = 30
+RESET_EMAIL_COOLDOWN_SECONDS = 60
+_recent_reset_emails = {}  # email -> time of the last link sent (stops one inbox being flooded)
+
+
+def _reset_serializer():
+    return URLSafeTimedSerializer(app.secret_key, salt="password-reset")
+
+
+def _password_fingerprint(password_hash):
+    return hashlib.sha256(password_hash.encode("utf-8")).hexdigest()[:24]
+
+
+def make_password_reset_token(user):
+    return _reset_serializer().dumps({"user_id": user["id"], "pw": _password_fingerprint(user["password_hash"])})
+
+
+def user_for_reset_token(token):
+    """Returns (user, None) for a valid link, or (None, reason) when it can't be used."""
+    try:
+        data = _reset_serializer().loads(token, max_age=RESET_LINK_MINUTES * 60)
+    except SignatureExpired:
+        return None, "This reset link has expired."
+    except BadSignature:
+        return None, "This reset link is not valid."
+    user = user_database.find_by_id(data.get("user_id")) if isinstance(data, dict) else None
+    if user is None or not hmac.compare_digest(_password_fingerprint(user["password_hash"]), str(data.get("pw", ""))):
+        return None, "This reset link has already been used."
+    return user, None
+
+
+def send_password_reset(user, link):
+    """Email the reset link, or print it in the terminal when no mail server is configured."""
+    body = (
+        f"Hi {user['name']},\n\n"
+        "Someone asked to reset the password for your Buff Bison Construction portal account.\n"
+        f"Open this link within {RESET_LINK_MINUTES} minutes to choose a new password:\n\n"
+        f"{link}\n\n"
+        "If you didn't ask for this, you can ignore this email; your password stays the same.\n"
+    )
+    server = os.environ.get("MAIL_SERVER", "").strip()
+    if not server:
+        print(f"\n[password reset] No MAIL_SERVER set, so the email was not sent.\n"
+              f"[password reset] Link for {user['email']}: {link}\n", flush=True)
+        return
+    message = EmailMessage()
+    message["Subject"] = "Reset your Buff Bison password"
+    message["From"] = os.environ.get("MAIL_FROM") or os.environ.get("MAIL_USERNAME") or "no-reply@buffbison.com"
+    message["To"] = user["email"]
+    message.set_content(body)
+    try:
+        with smtplib.SMTP(server, int(os.environ.get("MAIL_PORT", "587")), timeout=15) as smtp:
+            if os.environ.get("MAIL_USE_TLS", "true").lower() != "false":
+                smtp.starttls()
+            if os.environ.get("MAIL_USERNAME"):
+                smtp.login(os.environ["MAIL_USERNAME"], os.environ.get("MAIL_PASSWORD", ""))
+            smtp.send_message(message)
+    except (OSError, smtplib.SMTPException) as error:
+        # The page still shows the usual message, so it never reveals whether the account exists.
+        app.logger.error("Password reset email to %s failed: %s", user["email"], error)
+
+
 @app.route("/forgot-password", methods=["GET", "POST"])
 def forgot_password():
     message = None
     error = None
 
     if request.method == "POST":
-        email = request.form.get("email", "").strip()
+        email = request.form.get("email", "").strip().lower()
         if not email:
             error = "Enter your email address."
+        elif len(email) > 254 or "@" not in email:
+            error = "Enter a valid email address."
         else:
+            user = user_database.find_by_email(email)
+            last_sent = _recent_reset_emails.get(email, 0)
+            if user and time.monotonic() - last_sent >= RESET_EMAIL_COOLDOWN_SECONDS:
+                _recent_reset_emails[email] = time.monotonic()
+                link = url_for("reset_password", token=make_password_reset_token(user), _external=True)
+                send_password_reset(user, link)
+            # Same message either way, so this page can't be used to find out who has an account.
             message = (
-                "Password reset emails are not configured for this demo yet. "
-                "Please contact your administrator to reset your password."
+                "If an account uses that email, we've sent it a link to reset the password. "
+                f"The link works for {RESET_LINK_MINUTES} minutes."
             )
 
     return render_template("forgot_password.html", message=message, error=error)
+
+
+@app.route("/reset-password/<token>", methods=["GET", "POST"])
+def reset_password(token):
+    user, problem = user_for_reset_token(token)
+    if user is None:
+        return render_template("reset_password.html", problem=problem, error=None), 400
+
+    error = None
+    if request.method == "POST":
+        new_password = request.form.get("new_password", "")
+        confirmation = request.form.get("confirm_password", "")
+        if not 12 <= len(new_password) <= 128:
+            error = "Your new password must be between 12 and 128 characters."
+        elif new_password != confirmation:
+            error = "The new passwords do not match."
+        elif check_password_hash(user["password_hash"], new_password):
+            error = "Choose a new password different from your current password."
+        elif not user_database.update_password(user["id"], user["password_hash"], generate_password_hash(new_password)):
+            return render_template("reset_password.html", problem="This reset link has already been used.", error=None), 400
+        else:
+            session.clear()
+            flash("Your password has been reset. Sign in with your new password.", "password_reset")
+            return redirect(url_for("login"))
+
+    return render_template("reset_password.html", problem=None, error=error, email=user["email"])
 
 
 @app.route("/")
