@@ -34,6 +34,10 @@
             Password: <strong>SubcontractorDemo123!</strong>
         </p>
 
+        {% for message in get_flashed_messages(category_filter=['password_reset']) %}
+            <p class="login-success" role="status">{{ message }}</p>
+        {% endfor %}
+
         <!-- Error message (only shown after a failed login) -->
         {% if error %}
             <p class="login-error">{{ error }}</p>
