@@ -23,7 +23,7 @@ SCHEMA_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "schema.s
 
 # Tables cleared by reset-demo-data, children first so foreign keys are happy.
 BUSINESS_TABLES = (
-    "documents", "photos", "tasks", "subcontractor_invoices", "project_assignments", "project_budget_items",
+    "document_attachments", "documents", "photos", "tasks", "subcontractor_invoices", "project_assignments", "project_budget_items",
     "receipts", "invoice_line_items", "invoices", "projects",
     "estimate_line_items", "estimates", "subcontractors", "clients", "cost_categories",
 )
@@ -98,6 +98,9 @@ def init_app(app, database_file):
             "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'project_budget_items'").fetchone()
 
         create_tables(connection)
+        if 'attachment_filename' not in {row[1] for row in connection.execute('PRAGMA table_info(documents)')}:
+            connection.execute('ALTER TABLE documents ADD COLUMN attachment_filename TEXT')
+        connection.execute('UPDATE documents SET attachment_filename = original_filename WHERE file_path IS NOT NULL AND attachment_filename IS NULL')
 
         # Step 6 added contact/status columns to clients and subcontractors.
         # (SQLite can add columns to an existing table; the CHECK lives in schema.sql for new databases.)
@@ -818,9 +821,43 @@ def client_name_taken(name, exclude_id=None):
     ).fetchone() is not None
 
 
+def get_client_projects(client_id):
+    return get_db().execute(
+        "SELECT * FROM projects WHERE client_id = ? ORDER BY created_at DESC, project_id DESC",
+        (client_id,)).fetchall()
+
+
+def delete_client(client_id):
+    db = get_db()
+    with db:
+        if get_client(client_id) is None:
+            raise RuleError("Client not found.", 404)
+        linked = db.execute(
+            """SELECT 1 FROM projects WHERE client_id = ?
+               UNION ALL SELECT 1 FROM estimates WHERE client_id = ? LIMIT 1""",
+            (client_id, client_id)
+        ).fetchone()
+        if linked:
+            raise RuleError("This client has projects or estimates and cannot be deleted. Edit their status to Inactive instead.", 409)
+        db.execute("DELETE FROM clients WHERE client_id = ?", (client_id,))
+
+
+def format_phone(value):
+    value = str(value or '').strip()
+    if not all(char in '0123456789+().- ' for char in value):
+        return value
+    digits = ''.join(char for char in value if char in '0123456789')
+    prefix = ''
+    if len(digits) == 11 and digits.startswith('1'):
+        prefix, digits = '+1 ', digits[1:]
+    if len(digits) == 10:
+        return f'{prefix}({digits[:3]}) {digits[3:6]}-{digits[6:]}'
+    return value
+
+
 def save_client(data, client_id=None):
     db = get_db()
-    values = (data["name"], data["company"] or None, data["email"] or None, data["phone"] or None,
+    values = (data["name"], data["company"] or None, data["email"] or None, format_phone(data["phone"]) or None,
               data["address"] or None, data["status"], data["notes"] or None)
     with db:
         if client_id is None:
@@ -848,6 +885,21 @@ def get_subcontractors():
 
 def get_subcontractor(subcontractor_id):
     return get_db().execute("SELECT * FROM subcontractors WHERE subcontractor_id = ?", (subcontractor_id,)).fetchone()
+
+
+def delete_subcontractor(subcontractor_id):
+    db = get_db()
+    with db:
+        if get_subcontractor(subcontractor_id) is None:
+            raise RuleError("Subcontractor not found.", 404)
+        if db.execute(
+            """SELECT 1 FROM subcontractor_invoices si
+               JOIN project_assignments pa ON pa.assignment_id = si.assignment_id
+               WHERE pa.subcontractor_id = ? LIMIT 1""", (subcontractor_id,)
+        ).fetchone():
+            raise RuleError("This subcontractor has invoice history and cannot be deleted. Edit their status to Inactive instead.", 409)
+        db.execute("DELETE FROM project_assignments WHERE subcontractor_id = ?", (subcontractor_id,))
+        db.execute("DELETE FROM subcontractors WHERE subcontractor_id = ?", (subcontractor_id,))
 
 
 def get_subcontractor_project_ids(subcontractor_id):
@@ -1079,6 +1131,53 @@ def get_visible_file(table, file_id, user_id, role):
         if row[key] == file_id:
             return row
     return None
+
+
+def get_document_attachments(document_id):
+    return get_db().execute("SELECT * FROM document_attachments WHERE document_id = ? ORDER BY attachment_id",
+                            (document_id,)).fetchall()
+
+
+def remove_document_attachment(document_id, attachment_id):
+    db = get_db()
+    with db:
+        if attachment_id == 0:
+            row = db.execute("SELECT file_path FROM documents WHERE document_id = ?", (document_id,)).fetchone()
+            if row is None or not row['file_path']:
+                raise RuleError('Attachment not found.', 404)
+            next_file = db.execute("SELECT * FROM document_attachments WHERE document_id = ? ORDER BY attachment_id LIMIT 1",
+                                   (document_id,)).fetchone()
+            db.execute("UPDATE documents SET file_path = ?, attachment_filename = ? WHERE document_id = ?",
+                       (next_file['file_path'] if next_file else None,
+                        next_file['original_filename'] if next_file else None, document_id))
+            if next_file:
+                db.execute("DELETE FROM document_attachments WHERE attachment_id = ?", (next_file['attachment_id'],))
+        else:
+            row = db.execute("SELECT file_path FROM document_attachments WHERE document_id = ? AND attachment_id = ?",
+                             (document_id, attachment_id)).fetchone()
+            if row is None:
+                raise RuleError('Attachment not found.', 404)
+            db.execute("DELETE FROM document_attachments WHERE attachment_id = ?", (attachment_id,))
+    return row['file_path']
+
+
+def update_document(document_id, name, document_type, project_id, attachments=(), uploaded_by=None):
+    db = get_db()
+    with db:
+        current = db.execute("SELECT * FROM documents WHERE document_id = ?", (document_id,)).fetchone()
+        primary = current['file_path']
+        primary_name = current['attachment_filename'] or current['original_filename']
+        for original, stored in attachments:
+            if not primary:
+                primary = stored
+                primary_name = original
+            else:
+                db.execute("INSERT INTO document_attachments (document_id, original_filename, file_path) VALUES (?, ?, ?)",
+                           (document_id, original, stored))
+        db.execute("""UPDATE documents SET original_filename = ?, document_type = ?, project_id = ?,
+                      file_path = ?, attachment_filename = ?, uploaded_by = COALESCE(?, uploaded_by)
+                      WHERE document_id = ?""",
+                   (name, document_type, project_id, primary, primary_name, uploaded_by, document_id))
 
 
 def add_document(project_id, user_id, document_type, original_filename, stored_filename):

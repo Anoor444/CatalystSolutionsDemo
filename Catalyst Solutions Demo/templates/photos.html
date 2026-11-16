@@ -57,6 +57,10 @@
                             <a href="{{ url_for('photo_image', photo_id=photo.id) }}" target="_blank" rel="noopener">
                                 <img class="photo-preview photo-image" src="{{ url_for('photo_image', photo_id=photo.id) }}" alt="{{ photo.title }}">
                             </a>
+                            {% elif photo.title in demo_photo_images %}
+                            <a href="{{ url_for('static', filename=demo_photo_images[photo.title]) }}" target="_blank" rel="noopener">
+                                <img class="photo-preview photo-image" src="{{ url_for('static', filename=demo_photo_images[photo.title]) }}" alt="{{ photo.title }} — fictional sample photo" loading="lazy">
+                            </a>
                             {% else %}
                             <div class="photo-preview"><span class="photo-icon">🖼</span> Sample Photo</div>
                             {% endif %}

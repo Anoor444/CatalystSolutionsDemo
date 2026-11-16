@@ -213,9 +213,19 @@ CREATE TABLE IF NOT EXISTS documents (
     uploaded_by        INTEGER REFERENCES users(id) ON DELETE SET NULL,
     document_type      TEXT NOT NULL CHECK (document_type IN ('Estimate', 'Invoice', 'Receipt', 'Contract', 'Other')),
     original_filename  TEXT NOT NULL,
+    attachment_filename TEXT,
     file_path          TEXT,
     created_at         TEXT NOT NULL DEFAULT (datetime('now'))
 );
+
+CREATE TABLE IF NOT EXISTS document_attachments (
+    attachment_id INTEGER PRIMARY KEY,
+    document_id INTEGER NOT NULL REFERENCES documents(document_id) ON DELETE CASCADE,
+    original_filename TEXT NOT NULL,
+    file_path TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_document_attachments_document ON document_attachments(document_id);
 
 -- ---------- Indexes for common lookups ----------
 

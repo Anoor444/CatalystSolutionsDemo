@@ -72,7 +72,9 @@
                             {% for document in documents %}
                                 <tr>
                                     <td>
-                                        {% if document.file_path %}
+                                        {% if current_role == 'employee' %}
+                                        <a class="text-link" href="{{ url_for('edit_document', document_id=document.id) }}">{{ document.original_filename }}</a>
+                                        {% elif document.file_path %}
                                         <a class="text-link" href="{{ url_for('download_document', document_id=document.id) }}">{{ document.original_filename }}</a>
                                         {% else %}{{ document.original_filename }}{% endif %}
                                     </td>
@@ -82,6 +84,7 @@
                                     <td>{% if document.file_path %}<span class="status progress">Uploaded</span>{% else %}<span class="status planning">Sample</span>{% endif %}</td>
                                     {% if current_role == 'employee' %}
                                     <td>
+                                        {% if document.file_path %}<a class="btn-outline" href="{{ url_for('download_document', document_id=document.id) }}">Download</a>{% endif %}
                                         <form method="POST" action="{{ url_for('delete_document', document_id=document.id) }}" onsubmit="return confirm('Delete this document?');">
                                             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                                             <button type="submit" class="btn-outline" aria-label="Delete {{ document.original_filename }}">Delete</button>

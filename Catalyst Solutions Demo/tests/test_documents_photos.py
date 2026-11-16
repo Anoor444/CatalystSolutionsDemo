@@ -1,8 +1,10 @@
 """Documents and Photos stored in the database (backend step 7)."""
 import io
 import unittest
+from pathlib import Path
+from unittest.mock import patch
 
-from support import CLIENT, EMPLOYEE, SUBCONTRACTOR, BackendTestCase
+from support import CLIENT, EMPLOYEE, SUBCONTRACTOR, BackendTestCase, app
 
 
 class DocumentsPhotosTests(BackendTestCase):
@@ -21,6 +23,89 @@ class DocumentsPhotosTests(BackendTestCase):
         token = self.form_token(client, "/photos/upload")
         return client.post("/photos/upload", content_type="multipart/form-data", data={
             "csrf_token": token, "title": title, "project_id": str(project), "photo": (io.BytesIO(content), filename)})
+
+    def test_edit_document_details_preserves_file_and_checks_access(self):
+        project = self.project_id('Katy Home Addition')
+        self.upload_document(self.employee, 'Edit Me.pdf', b'%PDF unchanged', project)
+        did = self.value("SELECT document_id FROM documents WHERE original_filename = 'Edit Me.pdf'")
+        url = f'/documents/{did}/edit'
+        token = self.form_token(self.employee, url)
+        self.assertIn(url, self.employee.get('/documents').get_data(as_text=True))
+        self.assertEqual(self.employee.post(url).status_code, 400)
+        form = {'csrf_token': token, 'original_filename': 'Updated.pdf', 'document_type': 'Other', 'project_id': ''}
+        self.assertEqual(self.employee.post(url, data=form).status_code, 302)
+        self.assertEqual(self.value('SELECT original_filename FROM documents WHERE document_id = ?', did), 'Updated.pdf')
+        self.assertIsNone(self.value('SELECT project_id FROM documents WHERE document_id = ?', did))
+        self.assertEqual(self.download(self.employee, f'/documents/{did}/download'), b'%PDF unchanged')
+        for changes, error in (({'original_filename': ''}, 'Enter a document name'),
+                               ({'document_type': 'invalid'}, 'Choose a document type'),
+                               ({'project_id': '99999'}, 'Choose a project')):
+            page = self.employee.post(url, data=dict(form, **changes)).get_data(as_text=True)
+            self.assertIn(error, page)
+        self.assertEqual(self.value('SELECT original_filename FROM documents WHERE document_id = ?', did), 'Updated.pdf')
+        for client in (self.sub, self.login(CLIENT)):
+            self.assertBlocked(client.get(url))
+            other_token = self.form_token(client, '/login')
+            self.assertBlocked(client.post(url, data=dict(form, csrf_token=other_token)))
+        self.assertEqual(self.employee.get('/documents/99999/edit').status_code, 404)
+        sample = self.value('SELECT document_id FROM documents WHERE file_path IS NULL LIMIT 1')
+        self.assertEqual(self.employee.post(f'/documents/{sample}/edit', data=form).status_code, 302)
+
+    def test_multiple_attachments_and_individual_deletion(self):
+        did = self.value('SELECT document_id FROM documents WHERE file_path IS NULL LIMIT 1')
+        url = f'/documents/{did}/edit'
+        token = self.form_token(self.employee, url)
+        form = {'csrf_token': token, 'original_filename': 'Attached.pdf', 'document_type': 'Other', 'project_id': ''}
+        def upload(filename, content, **changes):
+            return self.employee.post(url, content_type='multipart/form-data', data={
+                **form, **changes, 'document': (io.BytesIO(content), filename)})
+        response = upload('first.pdf', b'%PDF first')
+        self.assertEqual(response.status_code, 302)
+        self.assertIn(url, response.location)
+        self.assertEqual(self.download(self.employee, f'/documents/{did}/download'), b'%PDF first')
+        old_path = Path(app.instance_path) / 'document_uploads' / self.value('SELECT file_path FROM documents WHERE document_id = ?', did)
+        self.assertTrue(old_path.exists())
+        self.assertIn('Choose a PDF', upload('bad.exe', b'bad').get_data(as_text=True))
+        self.assertIn('Choose a project', upload('new.pdf', b'%PDF invalid', project_id='99999').get_data(as_text=True))
+        self.assertEqual(self.download(self.employee, f'/documents/{did}/download'), b'%PDF first')
+        before = set(old_path.parent.iterdir())
+        with patch('app.database.update_document', side_effect=RuntimeError('test database failure')):
+            with self.assertRaises(RuntimeError):
+                upload('failed.pdf', b'%PDF failed')
+        self.assertEqual(set(old_path.parent.iterdir()), before)
+        self.assertTrue(old_path.exists())
+        self.assertEqual(upload('additional.pdf', b'%PDF additional').status_code, 302)
+        self.assertTrue(old_path.exists())
+        aid = self.value('SELECT attachment_id FROM document_attachments WHERE document_id = ?', did)
+        download_url = f'/documents/{did}/attachments/{aid}/download'
+        self.assertEqual(self.download(self.employee, download_url), b'%PDF additional')
+        self.assertEqual(self.download(self.employee, f'/documents/{did}/download'), b'%PDF first')
+        self.assertEqual(self.employee.post(url, data=form).status_code, 302)
+        delete_url = f'/documents/{did}/attachments/0/delete'
+        self.assertEqual(self.employee.post(delete_url).status_code, 400)
+        other_token = self.form_token(self.sub, '/login')
+        self.assertBlocked(self.sub.post(delete_url, data={'csrf_token': other_token}))
+        self.assertEqual(self.sub.get(download_url).status_code, 404)
+        self.assertEqual(self.employee.post(delete_url, data={'csrf_token': token}).status_code, 302)
+        self.assertFalse(old_path.exists())
+        self.assertEqual(self.download(self.employee, f'/documents/{did}/download'), b'%PDF additional')
+        self.assertEqual(self.employee.post(delete_url, data={'csrf_token': token}).status_code, 302)
+        self.assertEqual(self.employee.get(f'/documents/{did}/download').status_code, 404)
+        self.assertIn('No attachments yet.', self.employee.get(url).get_data(as_text=True))
+        self.assertEqual(self.employee.post(url, content_type='multipart/form-data', data={
+            **form, 'document': [(io.BytesIO(b'%PDF one'), 'one.pdf'), (io.BytesIO(b'two'), 'two.txt')]
+        }).status_code, 302)
+        aid = self.value('SELECT attachment_id FROM document_attachments WHERE document_id = ?', did)
+        wrong_doc = self.value('SELECT document_id FROM documents WHERE document_id != ? LIMIT 1', did)
+        self.assertEqual(self.employee.post(f'/documents/{wrong_doc}/attachments/{aid}/delete', data={'csrf_token': token}).status_code, 404)
+        self.assertEqual(self.employee.post(f'/documents/{did}/attachments/{aid}/delete', data={'csrf_token': token}).status_code, 302)
+        self.assertEqual(self.download(self.employee, f'/documents/{did}/download'), b'%PDF one')
+        before = set(old_path.parent.iterdir())
+        page = self.employee.post(url, content_type='multipart/form-data', data={
+            **form, 'document': [(io.BytesIO(b'%PDF ok'), 'ok.pdf'), (io.BytesIO(b'bad'), 'bad.exe')]
+        })
+        self.assertIn('Choose a PDF', page.get_data(as_text=True))
+        self.assertEqual(set(old_path.parent.iterdir()), before)
 
     def test_sample_documents_listed(self):
         page = self.employee.get("/documents").get_data(as_text=True)

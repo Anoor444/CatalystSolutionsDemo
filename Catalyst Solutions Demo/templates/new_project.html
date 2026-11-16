@@ -35,7 +35,7 @@
 
         <main class="content">
             <!-- Fields marked required are checked by the browser (HTML5 validation) -->
-            <form method="POST" action="{{ url_for('edit_project', project_id=project.project_id) if project else url_for('new_project') }}" class="form-page">
+            <form method="POST" action="{{ url_for('edit_project', project_id=project.project_id) if project else (url_for('new_project', client=selected_client.client_id) if selected_client else url_for('new_project')) }}" class="form-page">
                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
 
                 {% if errors %}
@@ -72,7 +72,13 @@
                 <section class="card form-section">
                     <h2>Client Information</h2>
                     <div class="form-grid">
-                        {% if project %}
+                        {% if selected_client and not project %}
+                        <div class="form-field">
+                            <label for="client_name">Client</label>
+                            <input id="client_name" value="{{ selected_client.name }}" readonly>
+                            <small class="field-note">This project will be added to this client.</small>
+                        </div>
+                        {% elif project %}
                         <div class="form-field">
                             <label for="client_name">Client</label>
                             <input type="text" id="client_name" value="{{ project.client_name }}" readonly aria-describedby="client-note">
@@ -158,7 +164,7 @@
 
                 <!-- Buttons -->
                 <div class="form-actions">
-                    <a href="{{ url_for('project_details', project_id=project.project_id) if project else url_for('projects') }}" class="btn-outline">Cancel</a>
+                    <a href="{{ url_for('project_details', project_id=project.project_id) if project else (url_for('new_client', client_id=selected_client.client_id) if selected_client else url_for('projects')) }}" class="btn-outline">Cancel</a>
                     <button type="submit" class="btn">{{ 'Save Changes' if project else 'Create Project' }}</button>
                 </div>
 

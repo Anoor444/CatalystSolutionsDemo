@@ -310,11 +310,12 @@
                             <tbody>
                                 {% for document in documents %}
                                 <tr>
-                                    <td>{% if document.file_path %}<a class="text-link" href="{{ url_for('download_document', document_id=document.id) }}">{{ document.original_filename }}</a>{% else %}{{ document.original_filename }} <small class="muted-note">(sample)</small>{% endif %}</td>
+                                    <td><a class="text-link" href="{{ url_for('edit_document', document_id=document.id) }}">{{ document.original_filename }}</a>{% if not document.file_path %} <small class="muted-note">(sample)</small>{% endif %}</td>
                                     <td>{{ document.document_type }}</td>
                                     <td>{{ document.uploaded_by_name or '—' }}</td>
                                     <td>{{ document.date_added|short_date }}</td>
                                     <td>
+                                        {% if document.file_path %}<a class="btn-outline" href="{{ url_for('download_document', document_id=document.id) }}">Download</a>{% endif %}
                                         <form method="POST" action="{{ url_for('delete_document', document_id=document.id) }}" onsubmit="return confirm('Delete this document?');">
                                             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                                             <button type="submit" class="btn-outline" aria-label="Delete {{ document.original_filename }}">Delete</button>
@@ -345,7 +346,13 @@
                                 <img class="photo-preview photo-image" src="{{ url_for('photo_image', photo_id=photo.id) }}" alt="{{ photo.title }}" loading="lazy">
                             </a>
                             {% else %}
+                            {% if photo.title in demo_photo_images %}
+                            <a href="{{ url_for('static', filename=demo_photo_images[photo.title]) }}" target="_blank" rel="noopener">
+                                <img class="photo-preview photo-image" src="{{ url_for('static', filename=demo_photo_images[photo.title]) }}" alt="{{ photo.title }} — fictional sample photo" loading="lazy">
+                            </a>
+                            {% else %}
                             <div class="photo-preview"><span class="photo-icon" aria-hidden="true">🖼</span> Sample Photo</div>
+                            {% endif %}
                             {% endif %}
                             <div class="photo-info">
                                 <h3>{{ photo.title }}</h3>

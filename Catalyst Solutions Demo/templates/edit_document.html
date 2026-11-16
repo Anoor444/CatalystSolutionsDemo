@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Edit Document | Buff Bison Construction</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+<div class="app">
+    {% set active_page = 'documents' %}
+    {% include '_sidebar.html' %}
+    <div class="main">
+        <header class="header"><div><h1>Edit Document</h1><p class="welcome">Update the document name, type, and associated project.</p></div></header>
+        <main class="content">
+            <form method="POST" enctype="multipart/form-data" class="form-page">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <section class="card form-section">
+                    <h2>Document Details</h2>
+                    {% if request.args.get('saved') and not error %}<p role="status">Document saved.</p>{% endif %}
+                    {% if error %}<p class="form-error" role="alert">{{ error }}</p>{% endif %}
+                    <div class="form-grid">
+                        <div class="form-field full">
+                            <label for="original_filename">Document Name <span class="required">*</span></label>
+                            <input id="original_filename" name="original_filename" value="{{ values.get('original_filename', '') }}" maxlength="150" required>
+                            <small class="form-help">Include the file extension, such as .pdf.</small>
+                        </div>
+                        <div class="form-field full">
+                            <label for="document">Add Attachments</label>
+                            <input type="file" id="document" name="document" accept=".pdf,.doc,.docx,.xls,.xlsx,.csv,.txt" multiple>
+                            <small class="form-help">Select one or more files, then click Save Changes. New uploads are added to existing attachments. PDF, Word, Excel, CSV, or TXT; up to 16 MB total per save.</small>
+                        </div>
+                        <div class="form-field">
+                            <label for="document_type">Document Type</label>
+                            <select id="document_type" name="document_type" required>
+                                {% for type in document_types %}<option value="{{ type }}" {% if values.get('document_type') == type %}selected{% endif %}>{{ type }}</option>{% endfor %}
+                            </select>
+                        </div>
+                        <div class="form-field">
+                            <label for="project_id">Associated Project</label>
+                            <select id="project_id" name="project_id">
+                                <option value="">General (no project)</option>
+                                {% for project in projects %}<option value="{{ project.project_id }}" {% if values.get('project_id')|string == project.project_id|string %}selected{% endif %}>{{ project.name }}</option>{% endfor %}
+                            </select>
+                        </div>
+                    </div>
+                </section>
+                <div class="form-actions"><a class="btn-outline" href="{{ url_for('documents') }}">Cancel</a><button class="btn" type="submit">Save Changes</button></div>
+            </form>
+            <section class="card form-section">
+                <h2>Attachments</h2>
+                {% if document.file_path %}
+                <p><a class="text-link" href="{{ url_for('download_document', document_id=document.id) }}">{{ document.attachment_filename or document.original_filename }}</a></p>
+                <form method="POST" action="{{ url_for('delete_document_attachment', document_id=document.id, attachment_id=0) }}" onsubmit="return confirm('Delete this attachment? The document details will be kept.');">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <button class="btn-outline" type="submit" aria-label="Delete attachment {{ document.original_filename }}">Delete Attachment</button>
+                </form>
+                {% endif %}
+                {% for attachment in attachments %}
+                <p><a class="text-link" href="{{ url_for('download_document_attachment', document_id=document.id, attachment_id=attachment.attachment_id) }}">{{ attachment.original_filename }}</a></p>
+                <form method="POST" action="{{ url_for('delete_document_attachment', document_id=document.id, attachment_id=attachment.attachment_id) }}" onsubmit="return confirm('Delete this attachment? The document details will be kept.');">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <button class="btn-outline" type="submit" aria-label="Delete attachment {{ attachment.original_filename }}">Delete Attachment</button>
+                </form>
+                {% endfor %}
+                {% if not document.file_path and not attachments %}<p>No attachments yet.</p>{% endif %}
+            </section>
+        </main>
+    </div>
+</div>
+</body>
+</html>

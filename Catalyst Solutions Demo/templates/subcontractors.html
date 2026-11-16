@@ -76,7 +76,13 @@
                                 <td>{{ sub.trade }}</td>
                                 <td title="{{ sub.project_names or 'Not assigned' }}">{{ sub.project_count }}</td>
                                 <td><span class="status {{ 'completed' if sub.status == 'Active' else 'planning' }}">{{ sub.status }}</span></td>
-                                <td><a class="btn-outline" href="{{ url_for('new_subcontractor', subcontractor_id=sub.subcontractor_id) }}" aria-label="Edit {{ sub.contact_name }}">Edit</a></td>
+                                <td><div class="sub-invoice-actions">
+                                    <a class="btn-outline" href="{{ url_for('new_subcontractor', subcontractor_id=sub.subcontractor_id) }}" aria-label="Edit {{ sub.contact_name }}">Edit</a>
+                                    <form method="POST" action="{{ url_for('delete_subcontractor', subcontractor_id=sub.subcontractor_id) }}" onsubmit="return confirm('Delete this subcontractor and remove their project assignments? Their login account will be kept. Subcontractors with invoice history cannot be deleted.');">
+                                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                        <button type="submit" class="btn-outline" aria-label="Delete {{ sub.contact_name }}">Delete</button>
+                                    </form>
+                                </div></td>
                             </tr>
                             {% endfor %}
                             <tr data-directory-empty hidden>

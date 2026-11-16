@@ -66,6 +66,13 @@ The client demo account is linked to the client **Sarah Johnson** (Riverstone Ki
 
 ## Adding a page that uses the database
 
+Employees can click a document name to edit its details and manage attachments.
+The details page accepts multiple files per save (16 MB total), adds them to the
+existing files, and offers an individual download and delete action for each file.
+Deleting an attachment keeps the document details. Existing uploads remain available
+after the automatic schema upgrade; extra files are stored in `document_attachments`
+and all files remain in `instance/document_uploads`.
+
 1. Add a query function in `database.py`. Use `get_db()` and `?` placeholders, never f-strings with user input.
 2. Call it from the route in `app.py` and pass the result to the template.
 3. In the template, loop over the rows. Formatting filters are available: `|currency`, `|short_date`, `|status_class`.

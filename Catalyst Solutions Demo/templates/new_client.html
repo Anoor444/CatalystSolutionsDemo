@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Add Client | Buff Bison Construction</title>
+    <title>{{ 'Edit Client' if existing else 'Add Client' }} | Buff Bison Construction</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
 </head>
 <body>
@@ -52,7 +52,7 @@
                         </div>
                         <div class="form-field">
                             <label for="phone">Phone Number</label>
-                            <input type="tel" id="phone" name="phone" value="{{ values.get('phone') or '' }}" autocomplete="tel">
+                            <input type="tel" id="phone" name="phone" value="{{ values.get('phone')|phone }}" autocomplete="tel">
                         </div>
                         <div class="form-field full">
                             <label for="address">Address</label>
@@ -78,6 +78,26 @@
                         </div>
                     </div>
                 </section>
+
+                {% if existing %}
+                <section class="card form-section">
+                    <div class="table-toolbar">
+                        <h2>Associated Projects ({{ client_projects|length }})</h2>
+                        <a class="btn" href="{{ url_for('new_project', client=existing.client_id) }}">+ Add Project</a>
+                    </div>
+                    <p class="form-help">Save any client changes before adding a project. The project count updates automatically when a project is created.</p>
+                    <div class="table-wrap">
+                        <table>
+                            <thead><tr><th>Project Number</th><th>Project Name</th><th>Status</th></tr></thead>
+                            <tbody>
+                                {% for project in client_projects %}
+                                <tr><td>{{ project.project_number }}</td><td><a class="text-link" href="{{ url_for('project_details', project_id=project.project_id) }}">{{ project.name }}</a></td><td><span class="status {{ project.status|status_class }}">{{ project.status }}</span></td></tr>
+                                {% else %}<tr><td colspan="3">No projects yet. Add a project to get started.</td></tr>{% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </section>
+                {% endif %}
 
                 <div class="form-actions">
                     <a href="{{ url_for('clients') }}" class="btn-outline">Cancel</a>

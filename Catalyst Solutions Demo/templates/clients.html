@@ -5,6 +5,11 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Clients | Buff Bison Construction</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <style>
+        .client-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+        .client-actions form { margin: 0; }
+        .directory-notice { padding: 12px; margin-bottom: 16px; border: 1px solid #b7dcc0; background: #e3f1e6; }
+    </style>
 </head>
 <body>
 <div class="app">
@@ -31,6 +36,9 @@
         </header>
 
         <main class="content" data-directory="clients">
+            {% for message in get_flashed_messages(category_filter=['message']) %}
+            <p class="directory-notice" role="status">{{ message }}</p>
+            {% endfor %}
             <div class="directory-summary" data-directory-summary></div>
 
             <section class="card">
@@ -66,10 +74,16 @@
                             <tr>
                                 <td><a class="project-name-link" href="{{ url_for('new_client', client_id=client.client_id) }}">{{ client.name }}</a>{% if client.company and client.company != client.name %}<br><small class="muted">{{ client.company }}</small>{% endif %}</td>
                                 <td>{% if client.email %}<a class="text-link" href="mailto:{{ client.email }}">{{ client.email }}</a>{% else %}—{% endif %}</td>
-                                <td>{% if client.phone %}<a class="text-link" href="tel:{{ client.phone|replace(' ', '')|replace('(', '')|replace(')', '')|replace('-', '') }}">{{ client.phone }}</a>{% else %}—{% endif %}</td>
+                                <td>{% if client.phone %}<a class="text-link" href="tel:{{ client.phone|replace(' ', '')|replace('(', '')|replace(')', '')|replace('-', '') }}">{{ client.phone|phone }}</a>{% else %}—{% endif %}</td>
                                 <td>{{ client.project_count }}</td>
                                 <td><span class="status {{ 'completed' if client.status == 'Active' else 'planning' }}">{{ client.status }}</span></td>
-                                <td><a class="btn-outline" href="{{ url_for('new_client', client_id=client.client_id) }}" aria-label="Edit {{ client.name }}">Edit</a></td>
+                                <td><div class="client-actions">
+                                    <a class="btn-outline" href="{{ url_for('new_client', client_id=client.client_id) }}" aria-label="Edit {{ client.name }}">Edit</a>
+                                    <form method="POST" action="{{ url_for('delete_client', client_id=client.client_id) }}" onsubmit="return confirm('Delete this client? Their login account will be kept. Clients with projects or estimates cannot be deleted.');">
+                                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                        <button type="submit" class="btn-outline" aria-label="Delete {{ client.name }}">Delete</button>
+                                    </form>
+                                </div></td>
                             </tr>
                             {% endfor %}
                             <tr data-directory-empty hidden>

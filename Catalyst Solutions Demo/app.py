@@ -83,6 +83,17 @@ app.register_blueprint(api)
 
 
 # ---------- Template formatting helpers ----------
+@app.context_processor
+def demo_photo_assets():
+    return {"demo_photo_images": {
+        "Flooring Installation": "images/demo/flooring.png",
+        "Bathroom Before Renovation": "images/demo/bathroom.png",
+        "Roof Installation": "images/demo/roof.png",
+        "Kitchen Progress": "images/demo/kitchen.png",
+    }}
+
+
+app.add_template_filter(database.format_phone, "phone")
 # Usage in templates: {{ project.budget_amount|currency }}, {{ project.due_date|short_date }},
 # <span class="status {{ project.status|status_class }}">
 
@@ -529,11 +540,21 @@ def new_project():
     managers = database.get_project_managers()
     errors = []
     form = request.form
+    selected_client = None
+    if request.args.get("client"):
+        selected_client = database.get_client(request.args.get("client", type=int))
+        if selected_client is None:
+            abort(404)
+        form = dict(request.form)
+        form.update(client_name=selected_client['name'], client_email=selected_client['email'] or '',
+                    client_phone=selected_client['phone'] or '')
 
     if request.method == "POST":
         data, errors = validate_new_project(form, managers)
         if not errors:
             database.create_project(data)
+            if selected_client:
+                return redirect(url_for('new_client', client_id=selected_client['client_id']))
             return redirect(url_for("projects"))
 
     return render_template(
@@ -543,6 +564,7 @@ def new_project():
         statuses=database.PROJECT_STATUSES,
         errors=errors,
         form=form,
+        selected_client=selected_client,
     )
 
 
@@ -758,6 +780,34 @@ def subcontractors():
                            transitions=database.SUB_INVOICE_TRANSITIONS)
 
 
+@app.route("/clients/<int:client_id>/delete", methods=["POST"])
+@role_required("employee")
+def delete_client(client_id):
+    try:
+        database.delete_client(client_id)
+    except database.RuleError as error:
+        if error.status_code == 404:
+            abort(404)
+        flash(error.message)
+    else:
+        flash("Client deleted. Their login account was kept.")
+    return redirect(url_for("clients"))
+
+
+@app.route("/subcontractors/<int:subcontractor_id>/delete", methods=["POST"])
+@role_required("employee")
+def delete_subcontractor(subcontractor_id):
+    try:
+        database.delete_subcontractor(subcontractor_id)
+    except database.RuleError as error:
+        if error.status_code == 404:
+            abort(404)
+        flash(error.message)
+    else:
+        flash("Subcontractor deleted. Project assignments were removed; their login account was kept.")
+    return redirect(url_for("subcontractors"))
+
+
 @app.route("/subcontractors/new", methods=["GET", "POST"], defaults={"subcontractor_id": None})
 @app.route("/subcontractors/<int:subcontractor_id>/edit", methods=["GET", "POST"])
 @role_required("employee")
@@ -858,7 +908,8 @@ def new_client(client_id):
         values = {}
 
     return render_template("new_client.html", user_name=session["user"], errors=errors,
-                           values=values, existing=existing)
+                           values=values, existing=existing,
+                           client_projects=database.get_client_projects(client_id) if existing else [])
 
 
 @app.route("/settings")
@@ -996,6 +1047,77 @@ def upload_document():
     )
 
 
+@app.route("/documents/<int:document_id>/edit", methods=["GET", "POST"])
+@role_required("employee")
+def edit_document(document_id):
+    document = database.get_visible_file("documents", document_id, session["user_id"], session["role"])
+    if document is None:
+        abort(404)
+    projects = database.projects_for(session["user_id"], session["role"])
+    values = dict(document) if request.method == "GET" else request.form
+    error = None
+    if request.method == "POST":
+        name = request.form.get("original_filename", "").strip()
+        document_type = request.form.get("document_type", "")
+        project_id, project_error = _chosen_project(request.form, projects, required=False)
+        if not name or len(name) > 150 or '/' in name or '\\' in name or any(ord(char) < 32 for char in name):
+            error = "Enter a document name of 1–150 characters without slashes or control characters."
+        elif document_type not in DOCUMENT_TYPES:
+            error = "Choose a document type."
+        elif project_error:
+            error = project_error
+        else:
+            attachments = []
+            try:
+                for uploaded_file in request.files.getlist("document"):
+                    if uploaded_file.filename:
+                        attachments.append(_save_upload(uploaded_file, DOCUMENT_UPLOAD_FOLDER, ALLOWED_DOCUMENT_EXTENSIONS))
+            except ValueError:
+                error = "Choose a PDF, Word, Excel, CSV, or TXT file."
+                for _, stored in attachments:
+                    _remove_file(DOCUMENT_UPLOAD_FOLDER, stored)
+            except Exception:
+                for _, stored in attachments:
+                    _remove_file(DOCUMENT_UPLOAD_FOLDER, stored)
+                raise
+            if error is None:
+                try:
+                    database.update_document(document_id, name, document_type, project_id,
+                                             attachments, session["user_id"] if attachments else None)
+                except Exception:
+                    for _, stored in attachments:
+                        _remove_file(DOCUMENT_UPLOAD_FOLDER, stored)
+                    raise
+                return redirect(url_for("edit_document", document_id=document_id, saved=1))
+    return render_template("edit_document.html", user_name=session["user"], document=document,
+                           values=values, projects=projects, document_types=DOCUMENT_TYPES, error=error,
+                           attachments=database.get_document_attachments(document_id))
+
+
+@app.route("/documents/<int:document_id>/attachments/<int:attachment_id>/delete", methods=["POST"])
+@role_required("employee")
+def delete_document_attachment(document_id, attachment_id):
+    try:
+        stored = database.remove_document_attachment(document_id, attachment_id)
+    except database.RuleError:
+        abort(404)
+    _remove_file(DOCUMENT_UPLOAD_FOLDER, stored)
+    return redirect(url_for("edit_document", document_id=document_id))
+
+
+@app.route("/documents/<int:document_id>/attachments/<int:attachment_id>/download")
+@role_required("employee", "subcontractor")
+def download_document_attachment(document_id, attachment_id):
+    if database.get_visible_file("documents", document_id, session["user_id"], session["role"]) is None:
+        abort(404)
+    attachment = next((a for a in database.get_document_attachments(document_id)
+                       if a['attachment_id'] == attachment_id), None)
+    if attachment is None:
+        abort(404)
+    return send_from_directory(DOCUMENT_UPLOAD_FOLDER, attachment['file_path'], as_attachment=True,
+                               download_name=attachment['original_filename'])
+
+
 @app.route("/documents/<int:document_id>/download")
 @role_required("employee", "subcontractor")
 def download_document(document_id):
@@ -1006,14 +1128,17 @@ def download_document(document_id):
         DOCUMENT_UPLOAD_FOLDER,
         document["file_path"],
         as_attachment=True,
-        download_name=document["original_filename"],
+        download_name=document["attachment_filename"] or document["original_filename"],
     )
 
 
 @app.route("/documents/<int:document_id>/delete", methods=["POST"])
 @role_required("employee")
 def delete_document(document_id):
+    attachments = database.get_document_attachments(document_id)
     _remove_file(DOCUMENT_UPLOAD_FOLDER, database.delete_file_record("documents", document_id))
+    for attachment in attachments:
+        _remove_file(DOCUMENT_UPLOAD_FOLDER, attachment['file_path'])
     return redirect(request.referrer if (request.referrer or "").startswith(request.host_url) else url_for("documents"))
 
 
