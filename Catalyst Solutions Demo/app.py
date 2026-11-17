@@ -28,6 +28,14 @@ from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
 from werkzeug.security import check_password_hash, generate_password_hash
 from werkzeug.utils import secure_filename
 
+# Local settings (database password etc.) can live in a .env file next to this one.
+# It is never committed; on Vercel the same names are set as Environment Variables.
+try:
+    from dotenv import load_dotenv
+    load_dotenv(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env"))
+except ImportError:
+    pass
+
 import database
 from user_database import DuplicateEmailError, UserDatabase
 
@@ -39,8 +47,7 @@ app.config["SESSION_COOKIE_SECURE"] = os.environ.get("COOKIE_SECURE", "").lower(
 
 DOCUMENT_UPLOAD_FOLDER = os.path.join(app.instance_path, "document_uploads")
 PHOTO_UPLOAD_FOLDER = os.path.join(app.instance_path, "photo_uploads")
-USER_DATABASE_FILE = os.path.join(app.instance_path, "users.sqlite3")
-user_database = UserDatabase(USER_DATABASE_FILE)
+user_database = UserDatabase()
 DEMO_EMAIL = "demo@buffbison.com"
 DEMO_PASSWORD = "Buffbison123"
 DEMO_NAME = "Demo Employee"
@@ -77,11 +84,12 @@ def initialize_user_database():
     ])
 
 
+# Everything (logins, projects, estimates, invoices, ...) lives in one MySQL database.
+# 1) create any missing tables from schema.sql, 2) add the demo logins,
+# 3) load the sample data the first time. See database.py.
+database.init_app(app)
 initialize_user_database()
-
-# Business tables (projects, estimates, invoices, ...) live in the same SQLite file.
-# Creates them from schema.sql and loads sample data the first time. See database.py.
-database.init_app(app, USER_DATABASE_FILE)
+database.seed_if_empty()
 
 # JSON endpoints used by the Estimates and Invoices pages (see api.py).
 from api import api  # noqa: E402  (imported here, after the database is set up)
@@ -136,18 +144,6 @@ def project_status_class(status):
         "Active": "completed",
         "Inactive": "planning",
     }.get(status, "planning")
-
-
-@app.cli.command("migrate-sqlite-users")
-@click.option("--source", type=click.Path(exists=True, dir_okay=False), default=USER_DATABASE_FILE)
-@click.option("--replace-existing", is_flag=True, help="Replace matching MySQL accounts with SQLite account details.")
-def migrate_sqlite_users(source, replace_existing):
-    """Copy SQLite accounts and password hashes into the configured MySQL database."""
-    try:
-        imported, skipped = user_database.migrate_sqlite(source, replace_existing)
-    except Exception as error:
-        raise click.ClickException(str(error)) from error
-    click.echo(f"Imported {imported} accounts; skipped {skipped} existing accounts. SQLite source unchanged.")
 
 
 def role_required(*allowed_roles):
@@ -243,7 +239,7 @@ def login():
 # The reset link carries a signed token (itsdangerous, part of Flask) holding the user id and a
 # fingerprint of their current password hash. It expires after RESET_LINK_MINUTES, and it stops
 # working as soon as the password changes, so each link can be used once. No table is needed,
-# so it works with both account backends (SQLite and MySQL).
+# so the reset links need no extra table.
 #
 # Email is sent through SMTP when MAIL_SERVER is set (see BACKEND.md). Without it, the link is
 # printed in the terminal running the app, which is enough for local demos.
@@ -375,7 +371,7 @@ def dashboard():
         project_ids = {project["project_id"] for project in projects}
         me = database.subcontractor_for_user(session["user_id"])
         invoices = database.get_subcontractor_invoices(me["subcontractor_id"]) if me else []
-        today = date.today().isoformat()
+        today = database.local_today().isoformat()
         tasks = [dict(task, overdue=task["due_date"] < today)
                  for task in database.get_open_tasks() if task["project_id"] in project_ids]
         return render_template(
@@ -390,7 +386,7 @@ def dashboard():
     if session["role"] == "client":
         estimates = database.client_estimates(session["user_id"])
         invoices = database.client_invoices(session["user_id"])
-        today = date.today().isoformat()
+        today = database.local_today().isoformat()
         open_invoices = [dict(i, overdue=i["due_date"] < today) for i in invoices if i["status"] == "Unpaid"]
         return render_template(
             "client.dashboard.html",
@@ -415,7 +411,7 @@ def dashboard():
 def get_upcoming_tasks(limit=6):
     """Open tasks for the Dashboard, soonest first (overdue ones on top).
     Same tasks as the Schedule page (database)."""
-    today = date.today().isoformat()
+    today = database.local_today().isoformat()
     open_tasks = database.get_open_tasks()   # already sorted by due date
     return {
         "count": len(open_tasks),
@@ -520,7 +516,7 @@ def client_estimate_decision(estimate_id):
 @app.route("/client/invoices")
 @role_required("client")
 def client_invoices():
-    today = date.today().isoformat()
+    today = database.local_today().isoformat()
     records = [dict(i, overdue=i["status"] == "Unpaid" and i["due_date"] < today)
                for i in database.client_invoices(session["user_id"])]
     return render_template(
@@ -542,7 +538,7 @@ def client_invoice(invoice_id):
     if invoice is None:
         abort(404)
     return render_template("portal_invoice.html", user_name=session["user"], invoice=invoice,
-                           overdue=invoice["status"] == "Unpaid" and invoice["due_date"] < date.today().isoformat())
+                           overdue=invoice["status"] == "Unpaid" and invoice["due_date"] < database.local_today().isoformat())
 
 
 # ---------- Subcontractor portal ----------
@@ -750,7 +746,7 @@ def project_details(project_id):
         project = database.portal_project(project_id, session["user_id"], session["role"])
         if project is None:
             abort(404)
-        today = date.today().isoformat()
+        today = database.local_today().isoformat()
         context = {"project": project, "tasks": [dict(t, overdue=t["status"] != "Completed" and t["due_date"] < today)
                                                  for t in database.get_tasks(project_id)]}
         if session["role"] == "client":
@@ -767,7 +763,7 @@ def project_details(project_id):
     if project is None:
         abort(404)
     # Employee view: every tab is filled from the database (step 9).
-    today = date.today().isoformat()
+    today = database.local_today().isoformat()
     tasks = [dict(t, overdue=t["status"] != "Completed" and t["due_date"] < today)
              for t in database.get_tasks(project_id)]
     upcoming = sorted((t for t in tasks if t["status"] != "Completed"), key=lambda t: t["due_date"])[:4]

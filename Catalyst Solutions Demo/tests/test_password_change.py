@@ -1,16 +1,8 @@
-"""Use a temporary account database; never change the running demo accounts."""
-import os
-from pathlib import Path
+"""Uses the MySQL test database (see support.py); never changes the running demo accounts."""
 import re
-import sys
-import tempfile
 import unittest
-from unittest.mock import patch
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-_instance = tempfile.TemporaryDirectory(prefix="buffbison-password-test-")
-with patch.dict(os.environ, {"APP_INSTANCE_PATH": _instance.name, "DB_BACKEND": "sqlite"}):
-    from app import app, user_database
+from support import app, user_database  # MySQL test database + temporary upload folder
 from werkzeug.security import check_password_hash, generate_password_hash
 
 

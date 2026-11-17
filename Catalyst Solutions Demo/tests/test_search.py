@@ -1,7 +1,5 @@
 """Header search and the demo client's sample estimate (backend step 10)."""
-import sqlite3
 import unittest
-from contextlib import closing
 
 from support import CLIENT, EMPLOYEE, SUBCONTRACTOR, BackendTestCase
 import database
@@ -12,8 +10,12 @@ TITLE = DEMO_CLIENT_ESTIMATE[0]
 
 class DemoClientEstimateTests(BackendTestCase):
     def run_loader_again(self):
-        with closing(sqlite3.connect(database.DATABASE_FILE)) as connection, connection:
-            load_demo_client_estimate(connection)
+        connection = database.connect()
+        try:
+            with connection:
+                load_demo_client_estimate(connection)
+        finally:
+            connection.close()
 
     def test_added_once_in_sent_status(self):
         rows = self.query("""SELECT e.estimate_id, e.estimate_number, e.status, e.total_amount, c.name

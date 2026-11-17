@@ -2,16 +2,38 @@
 
 ## How the data is stored
 
-- **One SQLite file:** `instance/users.sqlite3`. It holds the login `users` table and all business tables (projects, clients, estimates, invoices, receipts and so on).
-- **The `instance/` folder is not in Git.** Each person has their own copy of the database, the secret key, uploads and logs.
-- **The first time you run `python app.py`,** the app creates every table from `schema.sql` and loads the sample data from `seed_data.py`. On later runs it leaves your data alone.
+- **One MySQL database** (MySQL 8, Amazon RDS for MySQL, or a MySQL-compatible host such as TiDB Cloud). It holds the login `users` table and all business tables (projects, clients, estimates, invoices, receipts and so on).
+- **Connection settings come from environment variables**, or a `.env` file in this folder for local use. Copy `.env.example` to `.env` and fill it in. `.env` is never committed; on Vercel the same names go in the project's Environment Variables.
+- **The first time the app connects to an empty database,** it creates every table from `schema.sql` and loads the sample data from `seed_data.py`. Later it leaves your data alone.
+- **Uploaded files** (documents, photos, receipts, subcontractor invoices) are still saved in the `instance/` folder, which is not in Git. (Moving them into MySQL is backend step 14.)
+
+### Setting up MySQL on your computer
+
+1. Install **MySQL Server 8** (free Community edition) and MySQL Workbench.
+2. In Workbench, open `setup_mysql.sql`, replace the placeholder password, and run it. It creates the `catalyst_demo` database, a `catalyst_test` database for the tests, and a `catalyst_app` login.
+3. Copy `.env.example` to `.env` and put that password in `MYSQL_PASSWORD`.
+4. `pip install -r requirements.txt`, then `python app.py`.
+
+| Setting | Default | What it is |
+|---|---|---|
+| `MYSQL_HOST` / `MYSQL_PORT` | `127.0.0.1` / `3306` | Database server |
+| `MYSQL_USER` / `MYSQL_PASSWORD` | `catalyst_app` / (empty) | Database login |
+| `MYSQL_DATABASE` | `catalyst_demo` | Database name |
+| `MYSQL_SSL` | `false` | `true` for hosted databases (TiDB Cloud, Amazon RDS): connects over verified TLS |
+| `MYSQL_SSL_CA` | (certifi's list) | Certificate file to trust. Not needed for TiDB Cloud; for Amazon RDS, AWS's RDS bundle (`global-bundle.pem`) |
+| `MYSQL_POOL_SIZE` | `3` | Connections kept open per server instance (more are opened if needed) |
+| `MYSQL_TEST_DATABASE` | `catalyst_test` | Used by the tests; must end in `_test` (it is wiped on every test run) |
+| `APP_TIMEZONE` | `America/Chicago` | "Today", overdue checks and timestamps use this time zone, whatever the server's clock says |
 
 ## Files
 
 | File | What it does |
 |---|---|
-| `schema.sql` | Every table, based on the team ERD. Safe to run again. |
-| `database.py` | Opens the connection for each request, sets up tables at startup, and holds the query functions pages use (`get_projects()`, `create_project()`, ...). |
+| `schema.sql` | Every table (MySQL), based on the team ERD, with foreign keys. Safe to run again. |
+| `setup_mysql.sql` | One-time local setup: databases and the `catalyst_app` login. |
+| `.env.example` | The settings to copy into your own `.env`. |
+| `database.py` | Connection pool (one connection per request), table setup at startup, and the query functions pages use (`get_projects()`, `create_project()`, ...). |
+| `user_database.py` | Login accounts (the same `users` table, same database). |
 | `seed_data.py` | Sample data: the 12 projects, clients, project managers, cost categories, costs to date, 10 estimates, 9 invoices, 18 tasks, category budgets, expenses, client contact details and 11 subcontractors with project assignments. |
 | `api.py` | JSON API used by the Estimates and Invoices pages (see below). |
 | `static/js/api-client.js` | `apiRequest()`, the helper the pages use to call the API (sends the CSRF token). |
@@ -22,11 +44,12 @@ Run these from the `Catalyst Solutions Demo` folder:
 
 ```bash
 python app.py                              # run the site
+python -m flask --app app init-db          # create missing tables + sample data (also happens on startup)
 python -m flask --app app reset-demo-data  # wipe projects/clients/etc. and reload the sample data (keeps logins)
 python -m flask --app app create-user      # add a login account
 ```
 
-To start completely fresh, stop the app, delete the `instance` folder and run `python app.py`. Note that this also deletes uploaded documents and photos.
+To start completely fresh, drop and recreate the `catalyst_demo` database in Workbench, then run `python app.py`.
 
 ## Forgot password
 
@@ -63,7 +86,7 @@ From the `Catalyst Solutions Demo` folder:
 python -m unittest discover -s tests -v
 ```
 
-About 80 tests, roughly 30 seconds. They run the app against a **temporary** database and upload folder, so your real data in `instance/` is never touched, and every test starts from fresh sample data. `pytest tests` works too if you have pytest installed.
+About 90 tests, roughly a minute. They need MySQL running (same settings as the app) and use a **separate test database**, `catalyst_test` (`MYSQL_TEST_DATABASE`; the name must end in `_test`), which is dropped and recreated on every run, plus a temporary upload folder. Your real data is never touched, and every test starts from fresh sample data. `pytest tests` works too if you have pytest installed.
 
 | File | Covers |
 |---|---|
@@ -101,7 +124,7 @@ Deleting an attachment keeps the document details. Existing uploads remain avail
 after the automatic schema upgrade; extra files are stored in `document_attachments`
 and all files remain in `instance/document_uploads`.
 
-1. Add a query function in `database.py`. Use `get_db()` and `?` placeholders, never f-strings with user input.
+1. Add a query function in `database.py`. Use `get_db()` and `?` placeholders (they become MySQL's `%s` automatically), never f-strings with user input. Use MySQL SQL: `CONCAT()` to join text, `NOW()` / `CURDATE()` for the current time.
 2. Call it from the route in `app.py` and pass the result to the template.
 3. In the template, loop over the rows. Formatting filters are available: `|currency`, `|short_date`, `|status_class`.
 
@@ -150,14 +173,6 @@ All endpoints need a logged-in **employee**. POST, PUT, PATCH and DELETE need th
 Receipt files are saved in `instance/receipt_uploads/` (not in Git). Converting an estimate copies its line items into the project's budget by category.
 
 The server recalculates every line total and grand total. Unit prices are rounded to cents.
-
-## Moving to MySQL later
-
-The SQL is plain and portable. The main changes would be:
-- `INTEGER PRIMARY KEY` → `INT AUTO_INCREMENT PRIMARY KEY`
-- `TEXT` → `VARCHAR(...)`
-- `datetime('now')` → `CURRENT_TIMESTAMP`
-- `connect()` in `database.py` would use a MySQL driver instead of `sqlite3`
 
 ## Who can see what
 

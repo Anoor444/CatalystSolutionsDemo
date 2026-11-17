@@ -13,3 +13,6 @@ venv/
 .vscode/
 .DS_Store
 Thumbs.db
+
+# Local settings with passwords (never commit)
+.env
