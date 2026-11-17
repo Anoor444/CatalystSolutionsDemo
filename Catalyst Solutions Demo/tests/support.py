@@ -1,33 +1,69 @@
 """Shared setup for the backend tests.
 
-The app runs against a temporary instance folder (its own SQLite database and upload
-folders), so running the tests never touches your real data in `instance/`.
+The app runs against a separate MySQL test database and a temporary folder for uploads,
+so running the tests never touches your real data. The test database is
+MYSQL_TEST_DATABASE (default "catalyst_test"); its name must end in "_test", and it is
+dropped and created again at the start of every run. Connection settings (host, user,
+password, TLS) are the same ones the app uses: environment variables or the .env file.
 Every test starts from fresh sample data, so tests don't depend on each other or on their order.
 
 Run every test from the `Catalyst Solutions Demo` folder:
     python -m unittest discover -s tests -v
 """
-from contextlib import closing
 import os
 from pathlib import Path
 import re
-import sqlite3
 import sys
 import tempfile
 import unittest
-from unittest.mock import patch
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+PROJECT_DIR = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(PROJECT_DIR))
+
+
+def _prepare_test_database():
+    try:
+        from dotenv import load_dotenv
+        load_dotenv(PROJECT_DIR / ".env")
+    except ImportError:
+        pass
+    name = os.environ.get("MYSQL_TEST_DATABASE", "catalyst_test")
+    if not re.fullmatch(r"\w+_test", name):
+        raise RuntimeError(f"MYSQL_TEST_DATABASE must be a plain name ending in _test (got {name!r}); "
+                           "the tests drop and recreate it.")
+    import mysql.connector
+    import database as db_module
+
+    settings = db_module.connection_settings()
+    settings.pop("database")
+    try:
+        connection = mysql.connector.connect(**settings)
+    except mysql.connector.Error as error:
+        raise RuntimeError(f"Can't connect to MySQL for the tests ({error}). Check MYSQL_HOST/USER/PASSWORD "
+                           "in your environment or .env file.") from error
+    try:
+        cursor = connection.cursor()
+        cursor.execute(f"DROP DATABASE IF EXISTS `{name}`")
+        cursor.execute(f"CREATE DATABASE `{name}` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci")
+        cursor.close()
+    finally:
+        connection.close()
+    # Permanent for this test run: every connection (pooled or not) uses the test database.
+    os.environ["MYSQL_DATABASE"] = name
+
+
 if "app" not in sys.modules:
+    _prepare_test_database()
     _instance = tempfile.TemporaryDirectory(prefix="buffbison-test-")
-    with patch.dict(os.environ, {"APP_INSTANCE_PATH": _instance.name, "DB_BACKEND": "sqlite"}):
-        import app as _app_module  # noqa: F401
+    os.environ["APP_INSTANCE_PATH"] = _instance.name
+    import app as _app_module  # noqa: F401
 from app import app, user_database  # noqa: E402
 import database  # noqa: E402
 from werkzeug.security import generate_password_hash  # noqa: E402
 
 app.testing = True
-# Safety net: refuse to run against the real instance folder.
+# Safety nets: never run against real data.
+assert database.connection_settings()["database"].endswith("_test"), "Tests must use a *_test database"
 assert "buffbison-" in app.instance_path, f"Tests must use a temporary instance folder, not {app.instance_path}"
 
 EMPLOYEE = ("demo@buffbison.com", "Buffbison123")
@@ -86,8 +122,11 @@ class BackendTestCase(unittest.TestCase):
 
     # ---- reading the database directly -------------------------------
     def query(self, sql, *params):
-        with closing(sqlite3.connect(database.DATABASE_FILE)) as connection:
-            return connection.execute(sql, params).fetchall()
+        connection = database.connect()
+        try:
+            return [tuple(row) for row in connection.execute(sql, params).fetchall()]
+        finally:
+            connection.close()
 
     def value(self, sql, *params):
         rows = self.query(sql, *params)

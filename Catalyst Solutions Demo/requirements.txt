@@ -1,2 +1,8 @@
 Flask>=3.1,<4
 mysql-connector-python>=9.3,<10
+# TLS certificates for hosted MySQL (TiDB Cloud, Amazon RDS with MYSQL_SSL=true)
+certifi>=2024.2.2
+# Time zone data (America/Chicago) on Windows, which has none built in
+tzdata>=2024.1
+# Reads a local .env file with the database settings (optional; not used on Vercel)
+python-dotenv>=1.0,<2

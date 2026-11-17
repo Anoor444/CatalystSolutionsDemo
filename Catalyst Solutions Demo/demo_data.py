@@ -52,7 +52,9 @@ def get_demo_projects():
 def _days_from_today(number_of_days):
     """Returns a 'YYYY-MM-DD' date relative to today (negative = in the past).
     Relative dates keep the demo realistic no matter which day it is shown."""
-    return (date.today() + timedelta(days=number_of_days)).isoformat()
+    from database import local_today  # the app's time zone, not the server's
+
+    return (local_today() + timedelta(days=number_of_days)).isoformat()
 
 
 def get_job_cost_data():

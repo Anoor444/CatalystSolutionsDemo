@@ -4,7 +4,7 @@ Employee Estimates, Invoices, Job Costs, and Schedule have been restored to thei
 
 Start the existing Flask app with `python app.py`. No new Python or npm dependencies are required for these features.
 
-Settings now includes **Change Password** for employees, clients, and subcontractors. This account feature updates the real configured SQLite/MySQL account password, independently of browser demo records. It requires the current password and a matching new password of 12–128 characters. Verify it with `python tests/test_password_change.py`; these tests use a temporary database and leave demo accounts unchanged.
+Settings now includes **Change Password** for employees, clients, and subcontractors. This account feature updates the real account password in the MySQL database, independently of browser demo records. It requires the current password and a matching new password of 12–128 characters. Verify it with `python tests/test_password_change.py`; these tests use the separate MySQL test database (see BACKEND.md) and leave demo accounts unchanged.
 
 - Employees: create/edit projects, convert approved estimates, create/view invoices, mark paid/unpaid, download PDFs, search projects/client names/invoice numbers, manage costs/tasks, and attach project receipts/photos.
 - Subcontractors: view their three sample assigned projects, submit itemized invoices with optional attachments, view submitted invoices/PDFs, and upload progress photos.

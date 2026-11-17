@@ -63,7 +63,7 @@ def load_sample_data(connection):
     manager_ids = {}
     for email, name in PROJECT_MANAGERS:
         connection.execute(
-            "INSERT OR IGNORE INTO users (email, name, password_hash, role) VALUES (?, ?, ?, 'employee')",
+            "INSERT IGNORE INTO users (email, name, password_hash, role) VALUES (?, ?, ?, 'employee')",
             (email, name, generate_password_hash(secrets.token_urlsafe(24))),
         )
         manager_ids[name] = connection.execute(
@@ -269,10 +269,12 @@ TASKS = (
 
 
 def load_task_samples(connection):
-    from datetime import date, timedelta
+    from datetime import timedelta
+
+    from database import local_today
 
     def day(offset):
-        return (date.today() + timedelta(days=offset)).isoformat()
+        return (local_today() + timedelta(days=offset)).isoformat()
 
     for project, title, description, assigned, start, due, priority, status in TASKS:
         row = connection.execute("SELECT project_id FROM projects WHERE name = ?", (project,)).fetchone()
@@ -300,7 +302,7 @@ def load_cost_samples(connection):
     from demo_data import get_demo_projects, get_job_cost_data
 
     connection.execute(
-        "INSERT OR IGNORE INTO cost_categories (name, description) VALUES ('Miscellaneous', 'Small supplies and other costs')"
+        "INSERT IGNORE INTO cost_categories (name, description) VALUES ('Miscellaneous', 'Small supplies and other costs')"
     )
     category_ids = {row[1]: row[0] for row in connection.execute("SELECT category_id, name FROM cost_categories")}
     project_ids = {row[1]: row[0] for row in connection.execute("SELECT project_id, name FROM projects")}
@@ -311,7 +313,7 @@ def load_cost_samples(connection):
     def add_budget(project_id, category_name, amount):
         connection.execute(
             """INSERT INTO project_budget_items (project_id, category_id, estimated_amount) VALUES (?, ?, ?)
-               ON CONFLICT (project_id, category_id) DO UPDATE SET estimated_amount = estimated_amount + excluded.estimated_amount""",
+               ON DUPLICATE KEY UPDATE estimated_amount = estimated_amount + VALUES(estimated_amount)""",
             (project_id, category(category_name), amount),
         )
 
@@ -360,7 +362,7 @@ def load_cost_samples(connection):
 def copy_estimate_budget(connection, project_id):
     """Category budget for a project = its estimate's line items, totalled by category."""
     connection.execute(
-        """INSERT OR IGNORE INTO project_budget_items (project_id, category_id, estimated_amount)
+        """INSERT IGNORE INTO project_budget_items (project_id, category_id, estimated_amount)
            SELECT p.project_id, li.category_id, SUM(li.line_total)
            FROM projects p JOIN estimate_line_items li ON li.estimate_id = p.estimate_id
            WHERE p.project_id = ? AND li.category_id IS NOT NULL

@@ -1,48 +1,267 @@
 """
-Database helpers for the Buff Bison Construction Portal.
+Database helpers for the Buff Bison Construction Portal (MySQL).
 
-- One SQLite file (the same one the login system already uses).
-- get_db() gives each request its own connection; it closes automatically.
-- init_app(app) creates the tables from schema.sql and loads the sample
-  data the first time the app runs.
-- `flask --app app reset-demo-data` wipes the business tables and reloads
-  the sample data (user accounts are kept).
+- Works with MySQL 8, Amazon RDS for MySQL and MySQL-compatible hosts (TiDB Cloud).
+- Connection settings come from environment variables (see BACKEND.md / .env.example):
+  MYSQL_HOST, MYSQL_PORT, MYSQL_USER, MYSQL_PASSWORD, MYSQL_DATABASE, MYSQL_SSL, MYSQL_SSL_CA,
+  MYSQL_POOL_SIZE, APP_TIMEZONE.
+- get_db() gives each request one connection from a small pool; it goes back to the pool
+  at the end of the request. Pools are per server instance, which suits Vercel's functions.
+- Queries are written with "?" placeholders (or ":name" with a dict). The Connection
+  wrapper below turns them into MySQL's %s / %(name)s, so the query code stays readable.
+- Rows work like dictionaries and tuples at once: row["name"], row[0] and dict(row) all work.
+  DECIMAL comes back as float and DATE/DATETIME as "YYYY-MM-DD" / "YYYY-MM-DD HH:MM:SS"
+  strings, which is what the templates, JSON API and JavaScript expect.
+- init_app(app) creates the tables from schema.sql the first time (empty database);
+  seed_if_empty() loads the sample data once.
+- `flask --app app reset-demo-data` wipes the business tables and reloads the sample
+  data (user accounts are kept).
 
-Query functions for each page live at the bottom of this file, so app.py
-routes stay short.
+Query functions for each page live further down, so app.py routes stay short.
 """
-from contextlib import closing
+import datetime as _dt
+from decimal import Decimal
 import os
-import sqlite3
+import re
+import threading
+from zoneinfo import ZoneInfo
 
 import click
+import mysql.connector
+from mysql.connector import errors as mysql_errors
+from mysql.connector import pooling
 from flask import g
 
-DATABASE_FILE = None  # set by init_app()
-SCHEMA_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "schema.sql")
+PROJECT_DIR = os.path.dirname(os.path.abspath(__file__))
+SCHEMA_FILE = os.path.join(PROJECT_DIR, "schema.sql")
 
-# Tables cleared by reset-demo-data, children first so foreign keys are happy.
+# Tables cleared by reset-demo-data (user accounts are kept).
 BUSINESS_TABLES = (
     "document_attachments", "documents", "photos", "tasks", "subcontractor_invoices", "project_assignments", "project_budget_items",
     "receipts", "invoice_line_items", "invoices", "projects",
     "estimate_line_items", "estimates", "subcontractors", "clients", "cost_categories",
 )
+ALL_TABLES = ("users",) + BUSINESS_TABLES
 
 PROJECT_STATUSES = ("Planning", "In Progress", "On Hold", "Completed")
 
+IntegrityError = mysql_errors.IntegrityError   # duplicate key, foreign key problems
+
 
 # ---------------------------------------------------------------------
-# Connection handling
+# Settings and time zone
 # ---------------------------------------------------------------------
-def connect(path=None):
-    connection = sqlite3.connect(path or DATABASE_FILE)
-    connection.row_factory = sqlite3.Row          # rows behave like dicts: row["name"]
-    connection.execute("PRAGMA foreign_keys = ON")  # SQLite needs this to enforce FKs
-    return connection
+def _env_flag(name, default=False):
+    return os.environ.get(name, str(default)).strip().lower() in ("1", "true", "yes", "on")
+
+
+def connection_settings():
+    """MySQL connection settings from environment variables."""
+    settings = {
+        "host": os.environ.get("MYSQL_HOST", "127.0.0.1"),
+        "port": int(os.environ.get("MYSQL_PORT", "3306")),
+        "user": os.environ.get("MYSQL_USER", "catalyst_app"),
+        "password": os.environ.get("MYSQL_PASSWORD", ""),
+        "database": os.environ.get("MYSQL_DATABASE", "catalyst_demo"),
+        "charset": "utf8mb4",
+        "collation": "utf8mb4_unicode_ci",
+        "connection_timeout": 10,
+        "autocommit": True,           # each statement commits; `with db:` groups a transaction
+        "use_pure": True,             # the pure-Python driver: no compiler needed on Windows or Vercel
+    }
+    if _env_flag("MYSQL_SSL"):
+        # Hosted MySQL (TiDB Cloud, Amazon RDS) needs TLS. TiDB uses public certificates
+        # (certifi's list works); for RDS, set MYSQL_SSL_CA to AWS's RDS certificate bundle.
+        ca = os.environ.get("MYSQL_SSL_CA", "").strip()
+        if not ca:
+            import certifi
+            ca = certifi.where()
+        elif not os.path.isabs(ca):
+            ca = os.path.join(PROJECT_DIR, ca)
+        settings.update(ssl_ca=ca, ssl_verify_cert=True, ssl_verify_identity=True)
+    return settings
+
+
+APP_TIMEZONE = ZoneInfo(os.environ.get("APP_TIMEZONE", "America/Chicago"))
+
+
+def local_now():
+    """Current time in the app's time zone (Houston by default), whatever the server's clock says."""
+    return _dt.datetime.now(APP_TIMEZONE)
+
+
+def local_today():
+    return local_now().date()
+
+
+def _utc_offset():
+    """e.g. "-06:00": used as the MySQL session time zone, so NOW()/CURDATE() and the
+    DATETIME defaults are in the app's local time."""
+    minutes = int(local_now().utcoffset().total_seconds() // 60)
+    sign = "+" if minutes >= 0 else "-"
+    return f"{sign}{abs(minutes) // 60:02d}:{abs(minutes) % 60:02d}"
+
+
+# ---------------------------------------------------------------------
+# Rows and results (simple, uniform results for all query code)
+# ---------------------------------------------------------------------
+def _plain(value):
+    if isinstance(value, Decimal):
+        return float(value)
+    if isinstance(value, _dt.datetime):
+        return value.strftime("%Y-%m-%d %H:%M:%S")
+    if isinstance(value, _dt.date):
+        return value.isoformat()
+    if isinstance(value, bytearray):
+        return bytes(value)
+    return value
+
+
+class Row(tuple):
+    """A result row: row[0], row["column"], dict(row) and row.keys() all work."""
+
+    def __new__(cls, names, values):
+        row = super().__new__(cls, (_plain(v) for v in values))
+        row._names = names
+        row._index = {name: i for i, name in enumerate(names)}
+        return row
+
+    def __getitem__(self, key):
+        if isinstance(key, str):
+            return tuple.__getitem__(self, self._index[key])
+        return tuple.__getitem__(self, key)
+
+    def keys(self):
+        return list(self._names)
+
+    def get(self, key, default=None):
+        return self[key] if key in self._index else default
+
+
+class Result:
+    def __init__(self, rows, lastrowid, rowcount):
+        self._rows = rows
+        self.lastrowid = lastrowid
+        self.rowcount = rowcount
+
+    def fetchone(self):
+        return self._rows[0] if self._rows else None
+
+    def fetchall(self):
+        return list(self._rows)
+
+    def __iter__(self):
+        return iter(self._rows)
+
+
+_NAMED_PARAMETER = re.compile(r"(?<![\w:]):([A-Za-z_]\w*)")
+_translations = {}
+
+
+def _translate(sql, named):
+    """'?' -> '%s' (or ':name' -> '%(name)s'), and a literal % becomes %%."""
+    key = (sql, named)
+    if key not in _translations:
+        text = sql.replace("%", "%%")
+        text = _NAMED_PARAMETER.sub(r"%(\1)s", text) if named else text.replace("?", "%s")
+        _translations[key] = text
+    return _translations[key]
+
+
+class Connection:
+    """Wraps one MySQL connection. `with db:` runs the block as one transaction."""
+
+    def __init__(self, raw):
+        self.raw = raw
+        self._depth = 0
+
+    def execute(self, sql, params=None):
+        if params:
+            named = isinstance(params, dict)
+            sql, params = _translate(sql, named), (params if named else tuple(params))
+        else:
+            params = None
+        cursor = self.raw.cursor()
+        try:
+            cursor.execute(sql, params)
+            rows = []
+            if cursor.description:
+                names = tuple(cursor.column_names)
+                rows = [Row(names, values) for values in cursor.fetchall()]
+            return Result(rows, cursor.lastrowid, cursor.rowcount)
+        finally:
+            cursor.close()
+
+    def executemany(self, sql, seq_of_params):
+        for params in seq_of_params:
+            self.execute(sql, params)
+
+    def commit(self):
+        self.raw.commit()
+
+    def rollback(self):
+        self.raw.rollback()
+
+    def __enter__(self):
+        if self._depth == 0:
+            self.raw.start_transaction()
+        self._depth += 1
+        return self
+
+    def __exit__(self, exc_type, exc, tb):
+        self._depth -= 1
+        if self._depth == 0:
+            if exc_type is None:
+                self.raw.commit()
+            else:
+                self.raw.rollback()
+        return False
+
+    def close(self):
+        try:
+            if self.raw.in_transaction:
+                self.raw.rollback()
+        except mysql_errors.Error:
+            pass
+        self.raw.close()   # a pooled connection goes back to the pool
+
+
+# ---------------------------------------------------------------------
+# Connection pool
+# ---------------------------------------------------------------------
+_pool = None
+_pool_lock = threading.Lock()
+
+
+def _get_pool():
+    global _pool
+    if _pool is None:
+        with _pool_lock:
+            if _pool is None:
+                size = max(1, min(int(os.environ.get("MYSQL_POOL_SIZE", "3")), 32))
+                _pool = pooling.MySQLConnectionPool(
+                    pool_name="buffbison", pool_size=size, pool_reset_session=True, **connection_settings())
+    return _pool
+
+
+def connect():
+    """A connection from the pool (or a one-off connection when all pooled ones are busy).
+    Close it to give it back."""
+    try:
+        raw = _get_pool().get_connection()   # reconnects automatically if the server dropped it
+    except mysql_errors.PoolError:
+        raw = mysql.connector.connect(**connection_settings())
+    raw.autocommit = True
+    cursor = raw.cursor()
+    try:
+        cursor.execute(f"SET time_zone = '{_utc_offset()}'")
+    finally:
+        cursor.close()
+    return Connection(raw)
 
 
 def get_db():
-    """Connection for the current request (opened once, reused, closed at the end)."""
+    """Connection for the current request (opened once, reused, returned at the end)."""
     if "db" not in g:
         g.db = connect()
     return g.db
@@ -54,110 +273,57 @@ def close_db(_error=None):
         connection.close()
 
 
-def init_app(app, database_file):
-    global DATABASE_FILE
-    DATABASE_FILE = database_file
+# ---------------------------------------------------------------------
+# Schema, sample data and reset
+# ---------------------------------------------------------------------
+def init_app(app):
+    """Registers the request teardown and CLI commands, and creates any missing tables."""
     app.teardown_appcontext(close_db)
     app.cli.add_command(reset_demo_data_command)
-
-    with closing(connect()) as connection, connection:  # commit, then close
-        # Step 4 replaced the original (never used) tasks table with a fuller one.
-        columns = [row[1] for row in connection.execute("PRAGMA table_info(tasks)")]
-        if columns and "priority" not in columns and \
-                connection.execute("SELECT COUNT(*) FROM tasks").fetchone()[0] == 0:
-            connection.execute("DROP TABLE tasks")
-            columns = []
-        tasks_table_is_new = not columns
-
-        # Step 5 rebuilt receipts (it only held placeholder "costs to date" rows) and
-        # added project_budget_items. Both are refilled with sample costs below.
-        receipt_columns = [row[1] for row in connection.execute("PRAGMA table_info(receipts)")]
-        if receipt_columns and "description" not in receipt_columns:
-            connection.execute("DROP TABLE receipts")
-        # Step 7: documents/photos move from JSON files into these tables. The original
-        # tables were never used (always empty), so they are rebuilt with the new columns.
-        files_are_new = False
-        photo_columns = [row[1] for row in connection.execute("PRAGMA table_info(photos)")]
-        if not photo_columns or ("title" not in photo_columns and
-                                 connection.execute("SELECT COUNT(*) FROM photos").fetchone()[0] == 0):
-            if photo_columns:
-                connection.execute("DROP TABLE photos")
-                if connection.execute("SELECT COUNT(*) FROM documents").fetchone()[0] == 0:
-                    connection.execute("DROP TABLE documents")
-            files_are_new = True
-
-        # Step 8: subcontractor_invoices gets description/review/file columns. It was never
-        # used before (always empty), so it is rebuilt.
-        sub_invoice_columns = [row[1] for row in connection.execute("PRAGMA table_info(subcontractor_invoices)")]
-        sub_invoices_are_new = not sub_invoice_columns or "description" not in sub_invoice_columns
-        if sub_invoice_columns and sub_invoices_are_new and \
-                connection.execute("SELECT COUNT(*) FROM subcontractor_invoices").fetchone()[0] == 0:
-            connection.execute("DROP TABLE subcontractor_invoices")
-
-        costs_are_new = not connection.execute(
-            "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'project_budget_items'").fetchone()
-
-        create_tables(connection)
-        if 'attachment_filename' not in {row[1] for row in connection.execute('PRAGMA table_info(documents)')}:
-            connection.execute('ALTER TABLE documents ADD COLUMN attachment_filename TEXT')
-        connection.execute('UPDATE documents SET attachment_filename = original_filename WHERE file_path IS NOT NULL AND attachment_filename IS NULL')
-
-        # Step 6 added contact/status columns to clients and subcontractors.
-        # (SQLite can add columns to an existing table; the CHECK lives in schema.sql for new databases.)
-        directory_upgraded = False
-        for table, new_columns in (
-            ("clients", (("company", "TEXT"), ("address", "TEXT"),
-                         ("status", "TEXT NOT NULL DEFAULT 'Active'"), ("notes", "TEXT"))),
-            ("subcontractors", (("address", "TEXT"), ("license_number", "TEXT"),
-                                ("status", "TEXT NOT NULL DEFAULT 'Active'"), ("notes", "TEXT"))),
-        ):
-            existing = {row[1] for row in connection.execute(f"PRAGMA table_info({table})")}
-            for column, definition in new_columns:
-                if column not in existing:
-                    connection.execute(f"ALTER TABLE {table} ADD COLUMN {column} {definition}")
-                    directory_upgraded = True
-
-        from seed_data import (import_legacy_file_lists, load_billing_samples, load_cost_samples,
-                               load_directory_samples, load_file_samples, load_sample_data,
-                               load_subcontractor_invoice_samples, load_task_samples, load_demo_client_estimate)
-
-        def count(table):
-            return connection.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]
-
-        if count("projects") == 0:
-            load_sample_data(connection)          # brand-new database: everything
-        else:
-            if count("estimates") == 0 and count("invoices") == 0:
-                load_billing_samples(connection)  # database from step 1: add sample estimates/invoices
-            if tasks_table_is_new:
-                load_task_samples(connection)     # database from before step 4: add sample tasks
-            if costs_are_new:
-                load_cost_samples(connection)     # database from before step 5: add sample job costs
-            if directory_upgraded:
-                load_directory_samples(connection)  # database from before step 6: client details, subcontractors
-            if files_are_new:
-                load_file_samples(connection)       # database from before step 7: sample documents/photos
-            if sub_invoices_are_new:
-                load_subcontractor_invoice_samples(connection)  # database from before step 8
-            load_demo_client_estimate(connection)   # step 10: once (skips if it is already there)
-        if files_are_new:
-            # Anything uploaded before step 7 was listed in instance/documents.json and photos.json.
-            import_legacy_file_lists(connection, os.path.dirname(DATABASE_FILE))
-
-        # Databases created before step 3 stamped the sample projects with their creation time,
-        # which would fill "Recent Activity" with 12 "project created" entries. Backdate them once.
-        from seed_data import PROJECTS, SAMPLE_PROJECT_CREATED_AT
-        names = [p[0] for p in PROJECTS]
-        connection.execute(
-            f"UPDATE projects SET created_at = ? WHERE description IS NULL "
-            f"AND created_at > ? AND name IN ({','.join('?' * len(names))})",
-            (SAMPLE_PROJECT_CREATED_AT, SAMPLE_PROJECT_CREATED_AT, *names),
-        )
+    app.cli.add_command(init_db_command)
+    connection = connect()
+    try:
+        existing = {row[0] for row in connection.execute(
+            "SELECT table_name FROM information_schema.tables WHERE table_schema = DATABASE()")}
+        if not set(ALL_TABLES) <= {name.lower() for name in existing}:
+            create_tables(connection)
+    finally:
+        connection.close()
 
 
 def create_tables(connection):
+    """Runs schema.sql (every statement is CREATE TABLE IF NOT EXISTS)."""
     with open(SCHEMA_FILE, encoding="utf-8") as schema:
-        connection.executescript(schema.read())
+        text = "\n".join(line.split("--", 1)[0] for line in schema.read().splitlines())
+    for statement in text.split(";"):
+        if statement.strip():
+            connection.execute(statement)
+
+
+def seed_if_empty():
+    """Loads the sample data into a brand-new database (needs the demo logins to exist)."""
+    from seed_data import load_demo_client_estimate, load_sample_data
+
+    connection = connect()
+    try:
+        with connection:
+            if connection.execute("SELECT COUNT(*) FROM projects").fetchone()[0] == 0:
+                load_sample_data(connection)
+            load_demo_client_estimate(connection)   # once (skips if it is already there)
+    finally:
+        connection.close()
+
+
+@click.command("init-db")
+def init_db_command():
+    """Create any missing tables and load the sample data into an empty database."""
+    connection = connect()
+    try:
+        create_tables(connection)
+    finally:
+        connection.close()
+    seed_if_empty()
+    click.echo("Database ready.")
 
 
 @click.command("reset-demo-data")
@@ -172,12 +338,18 @@ def reset_business_data():
     Used by `flask reset-demo-data` and by the automated tests (tests/support.py)."""
     from seed_data import load_sample_data
 
-    with closing(connect()) as connection, connection:  # commit, then close
-        connection.execute("PRAGMA foreign_keys = OFF")
-        for table in BUSINESS_TABLES:
-            connection.execute(f"DELETE FROM {table}")
-        connection.execute("PRAGMA foreign_keys = ON")
-        load_sample_data(connection)
+    connection = connect()
+    try:
+        connection.execute("SET FOREIGN_KEY_CHECKS = 0")
+        try:
+            for table in BUSINESS_TABLES:
+                connection.execute(f"TRUNCATE TABLE {table}")   # also restarts the id counters
+        finally:
+            connection.execute("SET FOREIGN_KEY_CHECKS = 1")
+        with connection:
+            load_sample_data(connection)
+    finally:
+        connection.close()
 
 
 # ---------------------------------------------------------------------
@@ -373,7 +545,7 @@ def create_estimate(data, user_id):
     with db:
         cursor = db.execute(
             "INSERT INTO estimates (estimate_number, title, client_id, created_by, status, created_at) "
-            "VALUES ('pending', ?, ?, ?, ?, datetime('now', 'localtime'))",
+            "VALUES ('pending', ?, ?, ?, ?, NOW())",
             (data["title"], data["client_id"], user_id, data["status"]),
         )
         estimate_id = cursor.lastrowid
@@ -527,7 +699,7 @@ def set_invoice_status(invoice_id, new_status):
     db = get_db()
     with db:
         db.execute(
-            "UPDATE invoices SET status = ?, paid_at = CASE WHEN ? = 'Paid' THEN date('now', 'localtime') END "
+            "UPDATE invoices SET status = ?, paid_at = CASE WHEN ? = 'Paid' THEN CURDATE() END "
             "WHERE invoice_id = ?",
             (new_status, new_status, invoice_id),
         )
@@ -555,7 +727,7 @@ def get_dashboard():
         "unpaid_total": one("SELECT COALESCE(SUM(total_amount), 0) FROM invoices WHERE status = 'Unpaid'"),
         "unpaid_count": one("SELECT COUNT(*) FROM invoices WHERE status = 'Unpaid'"),
         "overdue_count": one(
-            "SELECT COUNT(*) FROM invoices WHERE status = 'Unpaid' AND due_date < date('now', 'localtime')"),
+            "SELECT COUNT(*) FROM invoices WHERE status = 'Unpaid' AND due_date < CURDATE()"),
     }
     open_projects = db.execute(
         _PROJECT_SELECT + " WHERE p.status != 'Completed' "
@@ -566,17 +738,17 @@ def get_dashboard():
     # Recent activity is built from the timestamps already stored on each record.
     events = db.execute(
         """
-        SELECT created_at AS at, 'Estimate ' || estimate_number || ' created: ' || title AS text
+        SELECT created_at AS at, CONCAT('Estimate ', estimate_number, ' created: ', title) AS text
           FROM estimates
         UNION ALL
-        SELECT issue_date, 'Invoice ' || i.invoice_number || ' sent: ' || p.name
+        SELECT issue_date, CONCAT('Invoice ', i.invoice_number, ' sent: ', p.name)
           FROM invoices i JOIN projects p ON p.project_id = i.project_id WHERE i.status != 'Draft'
         UNION ALL
-        SELECT paid_at, 'Invoice ' || invoice_number || ' paid ($' || printf('%,.2f', total_amount) || ')'
+        SELECT paid_at, CONCAT('Invoice ', invoice_number, ' paid ($', FORMAT(total_amount, 2), ')')
           FROM invoices WHERE paid_at IS NOT NULL
         UNION ALL
-        SELECT created_at, 'Project ' || name || ' created'
-               || CASE WHEN estimate_id IS NOT NULL THEN ' from an estimate' ELSE '' END
+        SELECT created_at, CONCAT('Project ', name, ' created',
+               CASE WHEN estimate_id IS NOT NULL THEN ' from an estimate' ELSE '' END)
           FROM projects
         ORDER BY at DESC
         LIMIT 6
@@ -675,7 +847,7 @@ def delete_task(task_id):
 # ---------------------------------------------------------------------
 _EXPENSE_SELECT = """
     SELECT r.receipt_id AS id, r.project_id, r.expense_date, r.description, c.name AS category,
-           CAST(r.amount AS REAL) AS amount, r.receipt_filename AS receipt_name,
+           r.amount AS amount, r.receipt_filename AS receipt_name,
            (r.file_path IS NOT NULL) AS has_receipt
     FROM receipts r JOIN cost_categories c ON c.category_id = r.category_id
 """
@@ -708,11 +880,11 @@ def get_job_cost_data():
     db = get_db()
     return {
         "projects": [dict(r) for r in db.execute(
-            "SELECT project_id AS id, name, CAST(budget_amount AS REAL) AS budget FROM projects ORDER BY name")],
+            "SELECT project_id AS id, name, budget_amount AS budget FROM projects ORDER BY name")],
         "categories": [r[0] for r in db.execute(
             "SELECT name FROM cost_categories WHERE is_active = 1 ORDER BY category_id")],
         "estimates": [dict(r) for r in db.execute(
-            """SELECT b.project_id, c.name AS category, CAST(b.estimated_amount AS REAL) AS estimated_amount
+            """SELECT b.project_id, c.name AS category, b.estimated_amount AS estimated_amount
                FROM project_budget_items b JOIN cost_categories c ON c.category_id = b.category_id""")],
         "expenses": get_expenses() + approved_subcontractor_costs(),
     }
@@ -721,9 +893,9 @@ def get_job_cost_data():
 def approved_subcontractor_costs(project_id=None):
     """Approved/paid subcontractor invoices, shaped like expenses (read-only on Job Costs).
     Projects' Actual Cost already includes them, so Job Costs shows them too."""
-    sql = """SELECT 'sub-' || si.sub_invoice_id AS id, pa.project_id, date(si.submitted_at, 'localtime') AS expense_date,
-                    s.company_name || ' invoice ' || si.invoice_number AS description,
-                    COALESCE(c.name, 'Subcontractor') AS category, CAST(si.amount AS REAL) AS amount,
+    sql = """SELECT CONCAT('sub-', si.sub_invoice_id) AS id, pa.project_id, DATE(si.submitted_at) AS expense_date,
+                    CONCAT(s.company_name, ' invoice ', si.invoice_number) AS description,
+                    COALESCE(c.name, 'Subcontractor') AS category, si.amount AS amount,
                     NULL AS receipt_name, 0 AS has_receipt, 1 AS read_only
              FROM subcontractor_invoices si
              JOIN project_assignments pa ON pa.assignment_id = si.assignment_id
@@ -874,7 +1046,7 @@ def save_client(data, client_id=None):
 
 def get_subcontractors():
     rows = get_db().execute(
-        """SELECT s.*, COUNT(pa.assignment_id) AS project_count, GROUP_CONCAT(p.name, ', ') AS project_names
+        """SELECT s.*, COUNT(pa.assignment_id) AS project_count, GROUP_CONCAT(p.name ORDER BY pa.assignment_id SEPARATOR ', ') AS project_names
            FROM subcontractors s
            LEFT JOIN project_assignments pa ON pa.subcontractor_id = s.subcontractor_id
            LEFT JOIN projects p ON p.project_id = pa.project_id
@@ -937,7 +1109,7 @@ def save_subcontractor(data, project_ids, subcontractor_id=None):
         for project_id in wanted - current:
             db.execute(
                 """INSERT INTO project_assignments (project_id, subcontractor_id, status, assigned_date)
-                   VALUES (?, ?, 'Active', date('now', 'localtime'))""", (project_id, subcontractor_id))
+                   VALUES (?, ?, 'Active', CURDATE())""", (project_id, subcontractor_id))
         _link_login(db, "subcontractors", "subcontractor_id", subcontractor_id, data["email"], "subcontractor")
     return subcontractor_id
 
@@ -987,7 +1159,7 @@ _FILE_TABLES = {
 def _visible_files(table, user_id, role, project_id=None):
     key, alias, order = _FILE_TABLES[table]
     sql = f"""SELECT {alias}.*, {alias}.{key} AS id, p.name AS project_name, u.name AS uploaded_by_name,
-                     date({alias}.created_at, 'localtime') AS date_added
+                     DATE({alias}.created_at) AS date_added
               FROM {table} {alias}
               LEFT JOIN projects p ON p.project_id = {alias}.project_id
               LEFT JOIN users u ON u.id = {alias}.uploaded_by
@@ -1051,27 +1223,27 @@ def get_project_activity(project_id, limit=6):
     """Recent events for one project, built from timestamps already stored on its records."""
     return get_db().execute(
         """SELECT * FROM (
-             SELECT datetime(created_at, 'localtime') AS at, 'Project created' AS text
+             SELECT created_at AS at, 'Project created' AS text
                FROM projects WHERE project_id = :p
              UNION ALL
-             SELECT issue_date, 'Invoice ' || invoice_number || ' sent'
+             SELECT issue_date, CONCAT('Invoice ', invoice_number, ' sent')
                FROM invoices WHERE project_id = :p AND status != 'Draft'
              UNION ALL
-             SELECT paid_at, 'Invoice ' || invoice_number || ' paid'
+             SELECT paid_at, CONCAT('Invoice ', invoice_number, ' paid')
                FROM invoices WHERE project_id = :p AND paid_at IS NOT NULL
              UNION ALL
-             SELECT datetime(created_at, 'localtime'), document_type || ' uploaded: ' || original_filename
+             SELECT created_at, CONCAT(document_type, ' uploaded: ', original_filename)
                FROM documents WHERE project_id = :p
              UNION ALL
-             SELECT datetime(created_at, 'localtime'), 'Photo uploaded: ' || title
+             SELECT created_at, CONCAT('Photo uploaded: ', title)
                FROM photos WHERE project_id = :p
              UNION ALL
-             SELECT datetime(si.submitted_at, 'localtime'), s.company_name || ' submitted invoice ' || si.invoice_number
+             SELECT si.submitted_at, CONCAT(s.company_name, ' submitted invoice ', si.invoice_number)
                FROM subcontractor_invoices si
                JOIN project_assignments pa ON pa.assignment_id = si.assignment_id
                JOIN subcontractors s ON s.subcontractor_id = pa.subcontractor_id
                WHERE pa.project_id = :p
-           ) WHERE at IS NOT NULL ORDER BY at DESC LIMIT :n""", {"p": project_id, "n": limit}).fetchall()
+           ) AS events WHERE at IS NOT NULL ORDER BY at DESC LIMIT :n""", {"p": project_id, "n": limit}).fetchall()
 
 
 def update_project(project_id, data):
@@ -1092,11 +1264,12 @@ def update_project(project_id, data):
 def search_everything(text, limit=20):
     """Header search (employee): projects, clients, invoices, estimates and subcontractors whose
     names, numbers or contact details contain the text (case-insensitive)."""
-    like = "%" + text.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%"
+    # "!" is the escape character, so a typed % or _ is matched literally.
+    like = "%" + text.replace("!", "!!").replace("%", "!%").replace("_", "!_") + "%"
     db = get_db()
 
     def find(sql):
-        return db.execute(sql.replace("~", "LIKE :q ESCAPE '\\'"), {"q": like, "n": limit}).fetchall()
+        return db.execute(sql.replace("~", "LIKE :q ESCAPE '!'"), {"q": like, "n": limit}).fetchall()
 
     return {
         "projects": find("""SELECT p.project_id, p.name, p.project_number, p.status, c.name AS client_name
@@ -1275,7 +1448,7 @@ def subcontractor_update_task(user_id, task_id, status):
 
 
 _SUB_INVOICE_SELECT = """
-    SELECT si.*, si.sub_invoice_id AS id, date(si.submitted_at, 'localtime') AS submitted_date, p.project_id, p.name AS project_name, s.subcontractor_id,
+    SELECT si.*, si.sub_invoice_id AS id, DATE(si.submitted_at) AS submitted_date, p.project_id, p.name AS project_name, s.subcontractor_id,
            s.company_name, s.contact_name, c.name AS category_name, u.name AS reviewed_by_name
     FROM subcontractor_invoices si
     JOIN project_assignments pa ON pa.assignment_id = si.assignment_id
@@ -1338,6 +1511,6 @@ def review_subcontractor_invoice(sub_invoice_id, new_status, reviewer_id):
     db = get_db()
     with db:
         db.execute(
-            """UPDATE subcontractor_invoices SET status = ?, reviewed_by = ?, reviewed_at = datetime('now')
+            """UPDATE subcontractor_invoices SET status = ?, reviewed_by = ?, reviewed_at = NOW()
                WHERE sub_invoice_id = ?""", (new_status, reviewer_id, sub_invoice_id))
     return get_subcontractor_invoice(sub_invoice_id)
