@@ -17,22 +17,6 @@
 
         <h1>Sign In</h1>
         <p class="login-subtitle">Project Management Portal</p>
-        <p class="login-notice">
-            <strong>Employee demo</strong><br>
-            Email: <strong>demo@buffbison.com</strong><br>
-            Password: <strong>Buffbison123</strong>
-        </p>
-        <p class="login-notice">
-            <strong>Client demo</strong><br>
-            Email: <strong>demo.client@buffbison.com</strong><br>
-            Password: <strong>ClientDemo123!</strong><br>
-        </p>
-
-        <p class="login-notice">
-            <strong>Subcontractor demo</strong><br>
-            Email: <strong>demo.subcontractor@buffbison.com</strong><br>
-            Password: <strong>SubcontractorDemo123!</strong>
-        </p>
 
         {% for message in get_flashed_messages(category_filter=['password_reset']) %}
             <p class="login-success" role="status">{{ message }}</p>
