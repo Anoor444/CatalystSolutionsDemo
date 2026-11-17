@@ -466,6 +466,11 @@ td:first-child {
     margin-bottom: 4px;
 }
 
+.password-reset-description {
+  font-size: 12px;
+  line-height: 1.5;
+}
+
 .login-subtitle {
     color: var(--muted);
     margin-bottom: 14px;

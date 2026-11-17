@@ -15,6 +15,11 @@
         .line-items td, .line-items th { padding: 6px 8px; }
         details summary { cursor: pointer; color: var(--copper); font-weight: bold; }
         .section-stack { display: flex; flex-direction: column; gap: 24px; }
+        .attention-list { margin-top: 8px; }
+        .attention-list li { padding: 20px 0; }
+        .attention-list .task-name { line-height: 1.5; margin-bottom: 8px; }
+        .attention-list .task-meta { line-height: 1.6; margin-bottom: 14px; }
+        .attention-list .btn-outline { display: inline-flex; padding: 8px 14px; }
     </style>
 </head>
 <body>
@@ -85,7 +90,7 @@
                 </section>
                 <section class="card">
                     <h2>Needs Your Attention</h2>
-                    <ul class="task-list">
+                    <ul class="task-list attention-list">
                         {% for estimate in pending_estimates %}
                         <li>
                             <p class="task-name">Estimate {{ estimate.estimate_number }}: {{ estimate.title }}</p>
