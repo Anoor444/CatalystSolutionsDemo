@@ -1,7 +1,6 @@
 """Schedule (tasks API, step 4) and Job Costs (expenses + receipt uploads, step 5)."""
 import io
 import json
-import os
 import re
 import unittest
 from unittest.mock import patch
@@ -65,7 +64,6 @@ class JobCostTests(BackendTestCase):
         page = self.client.get("/job-costs").get_data(as_text=True)
         self.data = json.loads(re.search(r'<script id="jc-data" type="application/json">(.*?)</script>', page, re.S).group(1))
         self.pearland = self.project_id("Pearland Patio Extension")
-        self.receipt_folder = os.path.join(app.instance_path, "receipt_uploads")
 
     def expense(self, method, url, **fields):
         form = {"project_id": self.pearland, "expense_date": "2026-11-14", "description": "Concrete delivery",
@@ -73,8 +71,9 @@ class JobCostTests(BackendTestCase):
         form.update(fields)
         return self.client.open(url, method=method, headers=self.headers, data=form, content_type="multipart/form-data")
 
-    def files_on_disk(self):
-        return set(os.listdir(self.receipt_folder)) if os.path.isdir(self.receipt_folder) else set()
+    def files_stored(self):
+        """Uploaded files kept in the database (the name is from when they were on disk)."""
+        return self.stored_files()
 
     def test_sample_costs_match_projects_page(self):
         ids = {p["name"]: p["id"] for p in self.data["projects"]}
@@ -96,14 +95,14 @@ class JobCostTests(BackendTestCase):
         self.assertGreaterEqual(len(bad.get_json()["errors"]), 3)
         exe = self.expense("POST", "/api/expenses", receipt=(io.BytesIO(b"MZ..."), "virus.exe"))
         self.assertEqual(exe.status_code, 400)
-        # Same rule as a real 10 MB+ file, but with the limit lowered so the test stays small and fast.
+        # Same rule as a real 4 MB+ file, but with the limit lowered so the test stays small and fast.
         with patch.object(api, "MAX_RECEIPT_BYTES", 1024):
             big = self.expense("POST", "/api/expenses", receipt=(io.BytesIO(b"x" * 2048), "big.pdf"))
         self.assertEqual(big.status_code, 400)
-        self.assertIn("10 MB", big.get_json()["error"])
+        self.assertIn("MB or smaller", big.get_json()["error"])
 
     def test_receipt_upload_replace_and_delete(self):
-        before = self.files_on_disk()
+        before = self.files_stored()
         pdf = b"%PDF-1.4 test receipt"
         response = self.expense("POST", "/api/expenses", receipt=(io.BytesIO(pdf), "Concrete invoice.pdf"))
         expense = response.get_json()
@@ -112,13 +111,13 @@ class JobCostTests(BackendTestCase):
         self.assertEqual(self.download(self.client, f"/api/expenses/{expense['id']}/receipt"), pdf)
         self.assertEqual(self.login(CLIENT).get(f"/api/expenses/{expense['id']}/receipt").status_code, 403)
         self.assertEqual(app.test_client().get(f"/api/expenses/{expense['id']}/receipt").status_code, 401)
-        first_file = self.files_on_disk() - before
+        first_file = self.files_stored() - before
         self.assertEqual(len(first_file), 1)
 
         replaced = self.expense("PUT", f"/api/expenses/{expense['id']}", amount="1300",
                                 receipt=(io.BytesIO(b"\x89PNG new"), "photo.png")).get_json()
         self.assertEqual((replaced["receipt_name"], replaced["amount"]), ("photo.png", 1300))
-        second_file = self.files_on_disk() - before
+        second_file = self.files_stored() - before
         self.assertEqual(len(second_file), 1)
         self.assertNotEqual(second_file, first_file, "old receipt file removed")
 
@@ -127,7 +126,7 @@ class JobCostTests(BackendTestCase):
         self.assertIn("$15,500", self.client.get("/projects").get_data(as_text=True), "14,200 + 1,300")
 
         self.assertEqual(self.client.delete(f"/api/expenses/{expense['id']}", headers=self.headers).status_code, 204)
-        self.assertEqual(self.files_on_disk(), before)
+        self.assertEqual(self.files_stored(), before)
         self.assertEqual(self.client.get(f"/api/expenses/{expense['id']}/receipt").status_code, 404)
 
     def test_sample_receipt_without_file(self):

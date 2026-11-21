@@ -1,7 +1,6 @@
 """Documents and Photos stored in the database (backend step 7)."""
 import io
 import unittest
-from pathlib import Path
 from unittest.mock import patch
 
 from support import CLIENT, EMPLOYEE, SUBCONTRACTOR, BackendTestCase, app
@@ -63,19 +62,19 @@ class DocumentsPhotosTests(BackendTestCase):
         self.assertEqual(response.status_code, 302)
         self.assertIn(url, response.location)
         self.assertEqual(self.download(self.employee, f'/documents/{did}/download'), b'%PDF first')
-        old_path = Path(app.instance_path) / 'document_uploads' / self.value('SELECT file_path FROM documents WHERE document_id = ?', did)
-        self.assertTrue(old_path.exists())
+        old_name = self.value('SELECT file_path FROM documents WHERE document_id = ?', did)
+        self.assertTrue(self.file_stored(old_name))
         self.assertIn('Choose a PDF', upload('bad.exe', b'bad').get_data(as_text=True))
         self.assertIn('Choose a project', upload('new.pdf', b'%PDF invalid', project_id='99999').get_data(as_text=True))
         self.assertEqual(self.download(self.employee, f'/documents/{did}/download'), b'%PDF first')
-        before = set(old_path.parent.iterdir())
+        before = self.stored_files()
         with patch('app.database.update_document', side_effect=RuntimeError('test database failure')):
             with self.assertRaises(RuntimeError):
                 upload('failed.pdf', b'%PDF failed')
-        self.assertEqual(set(old_path.parent.iterdir()), before)
-        self.assertTrue(old_path.exists())
+        self.assertEqual(self.stored_files(), before)
+        self.assertTrue(self.file_stored(old_name))
         self.assertEqual(upload('additional.pdf', b'%PDF additional').status_code, 302)
-        self.assertTrue(old_path.exists())
+        self.assertTrue(self.file_stored(old_name))
         aid = self.value('SELECT attachment_id FROM document_attachments WHERE document_id = ?', did)
         download_url = f'/documents/{did}/attachments/{aid}/download'
         self.assertEqual(self.download(self.employee, download_url), b'%PDF additional')
@@ -87,7 +86,7 @@ class DocumentsPhotosTests(BackendTestCase):
         self.assertBlocked(self.sub.post(delete_url, data={'csrf_token': other_token}))
         self.assertEqual(self.sub.get(download_url).status_code, 404)
         self.assertEqual(self.employee.post(delete_url, data={'csrf_token': token}).status_code, 302)
-        self.assertFalse(old_path.exists())
+        self.assertFalse(self.file_stored(old_name))
         self.assertEqual(self.download(self.employee, f'/documents/{did}/download'), b'%PDF additional')
         self.assertEqual(self.employee.post(delete_url, data={'csrf_token': token}).status_code, 302)
         self.assertEqual(self.employee.get(f'/documents/{did}/download').status_code, 404)
@@ -100,12 +99,12 @@ class DocumentsPhotosTests(BackendTestCase):
         self.assertEqual(self.employee.post(f'/documents/{wrong_doc}/attachments/{aid}/delete', data={'csrf_token': token}).status_code, 404)
         self.assertEqual(self.employee.post(f'/documents/{did}/attachments/{aid}/delete', data={'csrf_token': token}).status_code, 302)
         self.assertEqual(self.download(self.employee, f'/documents/{did}/download'), b'%PDF one')
-        before = set(old_path.parent.iterdir())
+        before = self.stored_files()
         page = self.employee.post(url, content_type='multipart/form-data', data={
             **form, 'document': [(io.BytesIO(b'%PDF ok'), 'ok.pdf'), (io.BytesIO(b'bad'), 'bad.exe')]
         })
         self.assertIn('Choose a PDF', page.get_data(as_text=True))
-        self.assertEqual(set(old_path.parent.iterdir()), before)
+        self.assertEqual(self.stored_files(), before)
 
     def test_sample_documents_listed(self):
         page = self.employee.get("/documents").get_data(as_text=True)
