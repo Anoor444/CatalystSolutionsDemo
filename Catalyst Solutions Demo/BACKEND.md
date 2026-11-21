@@ -5,7 +5,20 @@
 - **One MySQL database** (MySQL 8, Amazon RDS for MySQL, or a MySQL-compatible host such as TiDB Cloud). It holds the login `users` table and all business tables (projects, clients, estimates, invoices, receipts and so on).
 - **Connection settings come from environment variables**, or a `.env` file in this folder for local use. Copy `.env.example` to `.env` and fill it in. `.env` is never committed; on Vercel the same names go in the project's Environment Variables.
 - **The first time the app connects to an empty database,** it creates every table from `schema.sql` and loads the sample data from `seed_data.py`. Later it leaves your data alone.
-- **Uploaded files** (documents, photos, receipts, subcontractor invoices) are still saved in the `instance/` folder, which is not in Git. (Moving them into MySQL is backend step 14.)
+- **Uploaded files** (documents, attachments, photos, receipts, subcontractor invoices) are stored **in MySQL** too, in the `uploaded_files` table. Each record's `file_path` column holds the file's stored name. Nothing is saved on disk, which is what hosts like Vercel need.
+- **Upload limit: 4 MB per request** (one file, or several files together on the document page). Vercel refuses anything over 4.5 MB. Change `MAX_UPLOAD_MB` in `app.py` (and `MAX_RECEIPT_BYTES` in `api.py`) only if you deploy somewhere else.
+
+### Moving your old SQLite data into MySQL
+
+If you used the app before step 13, your old data is still in `instance/users.sqlite3`, and your uploaded files are in the `instance/*_uploads` folders. To copy all of it into MySQL (logins and passwords, ids and links are kept):
+
+```bash
+python tools/sqlite_to_mysql.py --replace
+```
+
+It shows which MySQL database it will write to and asks you to type that database's name to confirm, because **it empties that MySQL database first** (normally it only holds the sample data). The SQLite file and folders are only read, never changed. At the end it prints the row count of every table in SQLite and in MySQL, and how many files were copied.
+
+If you only need the files (records already in MySQL, files still in `instance/*_uploads`): `python tools/sqlite_to_mysql.py --uploads-only`. It's safe to run more than once.
 
 ### Setting up MySQL on your computer
 
@@ -32,6 +45,7 @@
 | `schema.sql` | Every table (MySQL), based on the team ERD, with foreign keys. Safe to run again. |
 | `setup_mysql.sql` | One-time local setup: databases and the `catalyst_app` login. |
 | `.env.example` | The settings to copy into your own `.env`. |
+| `tools/sqlite_to_mysql.py` | One-time copy of the old SQLite database and upload folders into MySQL (not part of the website). |
 | `database.py` | Connection pool (one connection per request), table setup at startup, and the query functions pages use (`get_projects()`, `create_project()`, ...). |
 | `user_database.py` | Login accounts (the same `users` table, same database). |
 | `seed_data.py` | Sample data: the 12 projects, clients, project managers, cost categories, costs to date, 10 estimates, 9 invoices, 18 tasks, category budgets, expenses, client contact details and 11 subcontractors with project assignments. |
@@ -94,6 +108,7 @@ About 90 tests, roughly a minute. They need MySQL running (same settings as the 
 | `tests/test_schedule_job_costs.py` | Tasks API; job costs, expenses and receipt uploads |
 | `tests/test_directory.py` | Clients and subcontractors pages, project assignments |
 | `tests/test_documents_photos.py` | Document and photo uploads, downloads, who can see what |
+| `tests/test_file_storage.py` | Files stored in MySQL (not on disk), deletes, 4 MB limit message |
 | `tests/test_portals.py` | Client and subcontractor portals, subcontractor invoice approval |
 | `tests/test_project_page.py` | Employee project page tabs, Edit Project |
 | `tests/test_search.py` | Search, demo client estimate |
@@ -118,11 +133,11 @@ The client demo account is linked to the client **Sarah Johnson** (Riverstone Ki
 ## Adding a page that uses the database
 
 Employees can click a document name to edit its details and manage attachments.
-The details page accepts multiple files per save (16 MB total), adds them to the
+The details page accepts multiple files per save (4 MB total), adds them to the
 existing files, and offers an individual download and delete action for each file.
 Deleting an attachment keeps the document details. Existing uploads remain available
 after the automatic schema upgrade; extra files are stored in `document_attachments`
-and all files remain in `instance/document_uploads`.
+and every file is stored in the `uploaded_files` table.
 
 1. Add a query function in `database.py`. Use `get_db()` and `?` placeholders (they become MySQL's `%s` automatically), never f-strings with user input. Use MySQL SQL: `CONCAT()` to join text, `NOW()` / `CURDATE()` for the current time.
 2. Call it from the route in `app.py` and pass the result to the template.
@@ -142,12 +157,12 @@ and all files remain in `instance/document_uploads`.
 - [x] Demo client sample estimate: "Riverstone Backsplash and Lighting Upgrade" is added once in Sent status for Sarah Johnson (next free estimate number), so the client portal has something to approve or decline
 - [x] Estimates: create, edit, send, approve or reject, delete drafts, convert to a project
 - [x] Invoices: create, edit, send, mark paid or unpaid, delete drafts, PDF
-- [x] Job Costs: expenses, budget by category and receipt uploads (PDF/JPG/PNG, 10 MB) in the database
+- [x] Job Costs: expenses, budget by category and receipt uploads (PDF/JPG/PNG, 4 MB) in the database
 - [x] Clients and Subcontractors: list, add, edit (status Active/Inactive instead of delete); subcontractors are assigned to projects from their form (`project_assignments`). A client or subcontractor record is linked to a login automatically when the emails match (used by the portals).
 - [x] Client portal: dashboard, My Projects, project page (progress, schedule, invoices), Estimates (approve or decline sent estimates) and Invoices (printable invoice page) — all from the database, only for the client linked to the login
-- [x] Subcontractor portal: dashboard, assigned projects only, task status updates, submit invoices (optional PDF/JPG/PNG in `instance/subcontractor_invoice_uploads`), Documents and Photos links
+- [x] Subcontractor portal: dashboard, assigned projects only, task status updates, submit invoices (optional PDF/JPG/PNG, stored in MySQL), Documents and Photos links
 - [x] Subcontractor invoice approval: employees approve, reject, mark paid or reopen on the Subcontractors page (`#sub-invoices`). Approved and paid invoices count as project cost and show on Job Costs as read-only rows (`id` like `sub-3`).
-- [x] Documents and Photos: records in the database (files in `instance/document_uploads` and `instance/photo_uploads`), real project dropdowns, delete for employees, `?project=<id>` filter. Subcontractors only see their assigned projects (plus their own uploads). Old `documents.json`/`photos.json` lists are imported once.
+- [x] Documents and Photos: records and files in the database, real project dropdowns, delete for employees, `?project=<id>` filter. Subcontractors only see their assigned projects (plus their own uploads). Old `documents.json`/`photos.json` lists are imported once.
 
 ## JSON API (api.py)
 
@@ -170,7 +185,7 @@ All endpoints need a logged-in **employee**. POST, PUT, PATCH and DELETE need th
 | PUT / DELETE | `/api/expenses/<id>` | Edit (a new file replaces the old receipt) or delete (removes the file too) |
 | GET | `/api/expenses/<id>/receipt` | Open the saved receipt file |
 
-Receipt files are saved in `instance/receipt_uploads/` (not in Git). Converting an estimate copies its line items into the project's budget by category.
+Receipt files are stored in MySQL (`uploaded_files`). Converting an estimate copies its line items into the project's budget by category.
 
 The server recalculates every line total and grand total. Unit prices are rounded to cents.
 

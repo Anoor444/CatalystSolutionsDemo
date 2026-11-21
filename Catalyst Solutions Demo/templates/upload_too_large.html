@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Upload Too Large | Buff Bison Construction</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <style>
+        a.login-btn { display: block; text-align: center; text-decoration: none; }
+    </style>
+</head>
+<body class="login-page">
+    <main class="login-box">
+        <div class="login-brand">
+            <img src="{{ url_for('static', filename='css/logo.png') }}" alt="Buff Bison Logo" class="login-logo">
+            <span class="brand-name">BUFF BISON</span>
+            <span class="brand-sub">CONSTRUCTION</span>
+        </div>
+        <h1>File Too Large</h1>
+        <p class="login-error" role="alert">{{ message }}</p>
+        <p class="login-subtitle">Try a smaller file, or upload files one at a time.</p>
+        <a href="{{ back }}" class="btn login-btn">Go Back</a>
+    </main>
+</body>
+</html>

@@ -300,3 +300,15 @@ CREATE TABLE IF NOT EXISTS document_attachments (
     KEY idx_document_attachments_document (document_id),
     CONSTRAINT fk_document_attachments_document FOREIGN KEY (document_id) REFERENCES documents(document_id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ---------- Uploaded file contents (backend step 14) ----------
+
+-- The bytes of every uploaded document, attachment, photo, receipt and subcontractor
+-- invoice. Each record's file_path column holds the stored_name of its row here.
+-- (Files live in the database because servers like Vercel don't keep files on disk.)
+CREATE TABLE IF NOT EXISTS uploaded_files (
+    stored_name  VARCHAR(255) NOT NULL PRIMARY KEY,
+    content      LONGBLOB NOT NULL,
+    size_bytes   INT NOT NULL,
+    created_at   DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

@@ -132,6 +132,13 @@ class BackendTestCase(unittest.TestCase):
         rows = self.query(sql, *params)
         return rows[0][0] if rows else None
 
+    def stored_files(self):
+        """Names of all uploaded files kept in the database (uploaded_files)."""
+        return {row[0] for row in self.query("SELECT stored_name FROM uploaded_files")}
+
+    def file_stored(self, stored_name):
+        return self.value("SELECT COUNT(*) FROM uploaded_files WHERE stored_name = ?", stored_name) == 1
+
     def project_id(self, name):
         return self.value("SELECT project_id FROM projects WHERE name = ?", name)
 

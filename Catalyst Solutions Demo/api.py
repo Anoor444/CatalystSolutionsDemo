@@ -14,10 +14,10 @@ deleted) live in database.py.
 from datetime import date
 from functools import wraps
 
-import os
+import io
 from uuid import uuid4
 
-from flask import Blueprint, current_app, jsonify, request, send_from_directory, session
+from flask import Blueprint, jsonify, request, send_file, session
 from werkzeug.utils import secure_filename
 
 import database
@@ -365,19 +365,11 @@ def delete_task(task_id):
 # The Job Costs form sends multipart/form-data (fields + optional receipt file),
 # so these endpoints read request.form / request.files instead of JSON.
 RECEIPT_EXTENSIONS = {"pdf", "jpg", "jpeg", "png"}
-MAX_RECEIPT_BYTES = 10 * 1024 * 1024
-
-
-def receipt_folder():
-    return os.path.join(current_app.instance_path, "receipt_uploads")
+MAX_RECEIPT_BYTES = 4 * 1024 * 1024   # Vercel refuses requests over 4.5 MB
 
 
 def remove_receipt_file(stored_name):
-    if stored_name:
-        try:
-            os.remove(os.path.join(receipt_folder(), stored_name))
-        except OSError:
-            pass
+    database.delete_files(stored_name)
 
 
 def expense_payload():
@@ -408,7 +400,7 @@ def expense_payload():
         if extension not in RECEIPT_EXTENSIONS:
             errors.append("Receipts must be PDF, JPG or PNG files.")
         elif len(data) > MAX_RECEIPT_BYTES:
-            errors.append("Receipts must be 10 MB or smaller.")
+            errors.append(f"Receipts must be {MAX_RECEIPT_BYTES // (1024 * 1024)} MB or smaller.")
         elif not data:
             errors.append("The receipt file is empty.")
         else:
@@ -420,15 +412,13 @@ def expense_payload():
 
 
 def save_receipt_file(clean):
-    """Writes the uploaded receipt (if any) to disk and records its stored name."""
+    """Stores the uploaded receipt (if any) in the database and records its stored name."""
     data = clean.pop("_file_bytes", None)
     extension = clean.pop("_extension", None)
     if data is None:
         return
-    os.makedirs(receipt_folder(), exist_ok=True)
     stored = f"{uuid4().hex}.{extension}"
-    with open(os.path.join(receipt_folder(), stored), "wb") as handle:
-        handle.write(data)
+    database.save_file(stored, data)
     clean["file_path"] = stored
 
 
@@ -477,6 +467,7 @@ def delete_expense(expense_id):
 @employee_required
 def download_receipt(expense_id):
     stored, original = database.get_receipt_file(expense_id)
-    if not os.path.exists(os.path.join(receipt_folder(), stored)):
+    data = database.read_file(stored)
+    if data is None:
         raise RuleError("The receipt file is missing from the server.", 404)
-    return send_from_directory(receipt_folder(), stored, download_name=original or stored)
+    return send_file(io.BytesIO(data), download_name=original or stored, max_age=0)

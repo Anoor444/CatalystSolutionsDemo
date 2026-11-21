@@ -37,7 +37,7 @@ SCHEMA_FILE = os.path.join(PROJECT_DIR, "schema.sql")
 
 # Tables cleared by reset-demo-data (user accounts are kept).
 BUSINESS_TABLES = (
-    "document_attachments", "documents", "photos", "tasks", "subcontractor_invoices", "project_assignments", "project_budget_items",
+    "uploaded_files", "document_attachments", "documents", "photos", "tasks", "subcontractor_invoices", "project_assignments", "project_budget_items",
     "receipts", "invoice_line_items", "invoices", "projects",
     "estimate_line_items", "estimates", "subcontractors", "clients", "cost_categories",
 )
@@ -350,6 +350,35 @@ def reset_business_data():
             load_sample_data(connection)
     finally:
         connection.close()
+
+
+# ---------------------------------------------------------------------
+# Uploaded files (stored in MySQL, step 14)
+# ---------------------------------------------------------------------
+# Records keep a stored name (e.g. "3f2a...c1.pdf") in their file_path column; the bytes
+# live in uploaded_files under that name.
+def save_file(stored_name, data):
+    save_file_with(get_db(), stored_name, data)
+
+
+def save_file_with(connection, stored_name, data):
+    """Same as save_file, on a given connection (used by tools/sqlite_to_mysql.py)."""
+    connection.execute("INSERT INTO uploaded_files (stored_name, content, size_bytes) VALUES (?, ?, ?)",
+                       (stored_name, data, len(data)))
+
+
+def read_file(stored_name):
+    """The file's bytes, or None if there is no such file."""
+    if not stored_name:
+        return None
+    row = get_db().execute("SELECT content FROM uploaded_files WHERE stored_name = ?", (stored_name,)).fetchone()
+    return row[0] if row else None
+
+
+def delete_files(*stored_names):
+    for name in stored_names:
+        if name:
+            get_db().execute("DELETE FROM uploaded_files WHERE stored_name = ?", (name,))
 
 
 # ---------------------------------------------------------------------

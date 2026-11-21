@@ -1,5 +1,6 @@
 # cd ".\CatalystSolutionsDemo\Catalyst Solutions Demo"; python app.py
 import hashlib
+import io
 import hmac
 import json
 import os
@@ -20,7 +21,7 @@ from flask import (
     redirect,
     render_template,
     request,
-    send_from_directory,
+    send_file,
     session,
     url_for,
 )
@@ -40,13 +41,14 @@ import database
 from user_database import DuplicateEmailError, UserDatabase
 
 app = Flask(__name__, instance_path=os.environ.get("APP_INSTANCE_PATH"))
-app.config["MAX_CONTENT_LENGTH"] = 16 * 1024 * 1024
+# Vercel refuses requests over 4.5 MB, so uploads are capped at 4 MB per request
+# (one file, or several files on the document page together).
+MAX_UPLOAD_MB = 4
+app.config["MAX_CONTENT_LENGTH"] = MAX_UPLOAD_MB * 1024 * 1024 + 256 * 1024   # + room for the form fields
 app.config["SESSION_COOKIE_HTTPONLY"] = True
 app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
 app.config["SESSION_COOKIE_SECURE"] = os.environ.get("COOKIE_SECURE", "").lower() == "true"
 
-DOCUMENT_UPLOAD_FOLDER = os.path.join(app.instance_path, "document_uploads")
-PHOTO_UPLOAD_FOLDER = os.path.join(app.instance_path, "photo_uploads")
 user_database = UserDatabase()
 DEMO_EMAIL = "demo@buffbison.com"
 DEMO_PASSWORD = "Buffbison123"
@@ -544,7 +546,6 @@ def client_invoice(invoice_id):
 # ---------- Subcontractor portal ----------
 # Subcontractors only see projects they are assigned to and their own invoices.
 SUB_INVOICE_EXTENSIONS = {"pdf", "jpg", "jpeg", "png"}
-SUB_INVOICE_UPLOAD_FOLDER = os.path.join(app.instance_path, "subcontractor_invoice_uploads")
 
 
 @app.route("/subcontractor/invoices", methods=["GET", "POST"])
@@ -575,8 +576,7 @@ def subcontractor_invoices():
         upload = request.files.get("invoice_file")
         if not errors and upload and upload.filename:
             try:
-                data["original_filename"], data["file_path"] = _save_upload(
-                    upload, SUB_INVOICE_UPLOAD_FOLDER, SUB_INVOICE_EXTENSIONS)
+                data["original_filename"], data["file_path"] = _save_upload(upload, SUB_INVOICE_EXTENSIONS)
             except ValueError:
                 errors.append("Attach a PDF, JPG or PNG file (or leave it empty).")
         if not errors:
@@ -609,8 +609,7 @@ def subcontractor_invoice_file(sub_invoice_id):
         me = database.subcontractor_for_user(session["user_id"])
         if me is None or me["subcontractor_id"] != invoice["subcontractor_id"]:
             abort(404)
-    return send_from_directory(SUB_INVOICE_UPLOAD_FOLDER, invoice["file_path"],
-                               download_name=invoice["original_filename"] or invoice["file_path"])
+    return _send_stored_file(invoice["file_path"], download_name=invoice["original_filename"] or invoice["file_path"])
 
 
 @app.route("/subcontractor-invoices/<int:sub_invoice_id>/review", methods=["POST"])
@@ -1071,16 +1070,25 @@ def _project_filter():
         return None
 
 
-def _save_upload(uploaded_file, folder, allowed_extensions):
-    """Validates and saves an uploaded file. Returns (original name, stored name) or raises ValueError."""
+def _save_upload(uploaded_file, allowed_extensions):
+    """Validates an uploaded file and stores it in the database (uploaded_files).
+    Returns (original name, stored name) or raises ValueError."""
     safe_filename = secure_filename(uploaded_file.filename or "")
     extension = safe_filename.rsplit(".", 1)[-1].lower() if "." in safe_filename else ""
     if not safe_filename or extension not in allowed_extensions:
         raise ValueError
     stored_filename = f"{uuid4().hex}.{extension}"
-    os.makedirs(folder, exist_ok=True)
-    uploaded_file.save(os.path.join(folder, stored_filename))
+    database.save_file(stored_filename, uploaded_file.read())
     return uploaded_file.filename.strip()[-150:], stored_filename
+
+
+def _send_stored_file(stored_filename, download_name=None, as_attachment=False):
+    """Sends a file kept in the database (404 if it is missing)."""
+    data = database.read_file(stored_filename)
+    if data is None:
+        abort(404)
+    return send_file(io.BytesIO(data), download_name=download_name or stored_filename,
+                     as_attachment=as_attachment, max_age=0)
 
 
 def _chosen_project(form, projects, required):
@@ -1097,12 +1105,8 @@ def _chosen_project(form, projects, required):
     return project_id, None
 
 
-def _remove_file(folder, stored_filename):
-    if stored_filename:
-        try:
-            os.remove(os.path.join(folder, stored_filename))
-        except OSError:
-            pass
+def _remove_file(stored_filename):
+    database.delete_files(stored_filename)
 
 
 @app.route("/documents")
@@ -1135,7 +1139,7 @@ def upload_document():
             error = project_error
         else:
             try:
-                original, stored = _save_upload(uploaded_file, DOCUMENT_UPLOAD_FOLDER, ALLOWED_DOCUMENT_EXTENSIONS)
+                original, stored = _save_upload(uploaded_file, ALLOWED_DOCUMENT_EXTENSIONS)
             except ValueError:
                 error = "Choose a PDF, Word, Excel, CSV, or TXT file."
             else:
@@ -1178,14 +1182,14 @@ def edit_document(document_id):
             try:
                 for uploaded_file in request.files.getlist("document"):
                     if uploaded_file.filename:
-                        attachments.append(_save_upload(uploaded_file, DOCUMENT_UPLOAD_FOLDER, ALLOWED_DOCUMENT_EXTENSIONS))
+                        attachments.append(_save_upload(uploaded_file, ALLOWED_DOCUMENT_EXTENSIONS))
             except ValueError:
                 error = "Choose a PDF, Word, Excel, CSV, or TXT file."
                 for _, stored in attachments:
-                    _remove_file(DOCUMENT_UPLOAD_FOLDER, stored)
+                    _remove_file(stored)
             except Exception:
                 for _, stored in attachments:
-                    _remove_file(DOCUMENT_UPLOAD_FOLDER, stored)
+                    _remove_file(stored)
                 raise
             if error is None:
                 try:
@@ -1193,7 +1197,7 @@ def edit_document(document_id):
                                              attachments, session["user_id"] if attachments else None)
                 except Exception:
                     for _, stored in attachments:
-                        _remove_file(DOCUMENT_UPLOAD_FOLDER, stored)
+                        _remove_file(stored)
                     raise
                 return redirect(url_for("edit_document", document_id=document_id, saved=1))
     return render_template("edit_document.html", user_name=session["user"], document=document,
@@ -1208,7 +1212,7 @@ def delete_document_attachment(document_id, attachment_id):
         stored = database.remove_document_attachment(document_id, attachment_id)
     except database.RuleError:
         abort(404)
-    _remove_file(DOCUMENT_UPLOAD_FOLDER, stored)
+    _remove_file(stored)
     return redirect(url_for("edit_document", document_id=document_id))
 
 
@@ -1221,8 +1225,7 @@ def download_document_attachment(document_id, attachment_id):
                        if a['attachment_id'] == attachment_id), None)
     if attachment is None:
         abort(404)
-    return send_from_directory(DOCUMENT_UPLOAD_FOLDER, attachment['file_path'], as_attachment=True,
-                               download_name=attachment['original_filename'])
+    return _send_stored_file(attachment['file_path'], download_name=attachment['original_filename'], as_attachment=True)
 
 
 @app.route("/documents/<int:document_id>/download")
@@ -1231,21 +1234,17 @@ def download_document(document_id):
     document = database.get_visible_file("documents", document_id, session["user_id"], session["role"])
     if document is None or not document["file_path"]:
         return "Document not found.", 404
-    return send_from_directory(
-        DOCUMENT_UPLOAD_FOLDER,
-        document["file_path"],
-        as_attachment=True,
-        download_name=document["attachment_filename"] or document["original_filename"],
-    )
+    return _send_stored_file(document["file_path"], as_attachment=True,
+                             download_name=document["attachment_filename"] or document["original_filename"])
 
 
 @app.route("/documents/<int:document_id>/delete", methods=["POST"])
 @role_required("employee")
 def delete_document(document_id):
     attachments = database.get_document_attachments(document_id)
-    _remove_file(DOCUMENT_UPLOAD_FOLDER, database.delete_file_record("documents", document_id))
+    _remove_file(database.delete_file_record("documents", document_id))
     for attachment in attachments:
-        _remove_file(DOCUMENT_UPLOAD_FOLDER, attachment['file_path'])
+        _remove_file(attachment['file_path'])
     return redirect(request.referrer if (request.referrer or "").startswith(request.host_url) else url_for("documents"))
 
 
@@ -1282,7 +1281,7 @@ def upload_photo():
             error = project_error
         else:
             try:
-                original, stored = _save_upload(uploaded_file, PHOTO_UPLOAD_FOLDER, ALLOWED_PHOTO_EXTENSIONS)
+                original, stored = _save_upload(uploaded_file, ALLOWED_PHOTO_EXTENSIONS)
             except ValueError:
                 error = "Choose a JPG, PNG, GIF, or WebP image."
             else:
@@ -1306,14 +1305,23 @@ def photo_image(photo_id):
     photo = database.get_visible_file("photos", photo_id, session["user_id"], session["role"])
     if photo is None or not photo["file_path"]:
         return "Photo not found.", 404
-    return send_from_directory(PHOTO_UPLOAD_FOLDER, photo["file_path"])
+    return _send_stored_file(photo["file_path"])
 
 
 @app.route("/photos/<int:photo_id>/delete", methods=["POST"])
 @role_required("employee")
 def delete_photo(photo_id):
-    _remove_file(PHOTO_UPLOAD_FOLDER, database.delete_file_record("photos", photo_id))
+    _remove_file(database.delete_file_record("photos", photo_id))
     return redirect(request.referrer if (request.referrer or "").startswith(request.host_url) else url_for("photos"))
+
+
+@app.errorhandler(413)
+def upload_too_large(_error):
+    message = f"That upload is too large. Files must be {MAX_UPLOAD_MB} MB or smaller in total."
+    if request.path.startswith("/api/"):
+        return jsonify({"error": message}), 413
+    back = request.referrer if (request.referrer or "").startswith(request.host_url) else url_for("dashboard")
+    return render_template("upload_too_large.html", message=message, back=back), 413
 
 
 if __name__ == "__main__":
