@@ -14,6 +14,9 @@
 --     (APP_TIMEZONE, default America/Chicago; set per connection).
 --   * Foreign keys are written as table constraints. (MySQL ignores the
 --     short "col INT REFERENCES t(id)" form, so it is never used here.)
+--   * /*T![auto_id_cache] AUTO_ID_CACHE=1 */ is read only by TiDB (MySQL
+--     treats it as a comment): it makes TiDB number new rows 1, 2, 3...
+--     like MySQL instead of jumping ahead in large steps.
 -- =====================================================================
 
 -- ---------- Logins (all roles) ----------
@@ -28,7 +31,7 @@ CREATE TABLE IF NOT EXISTS users (
     role           VARCHAR(20) NOT NULL,
     UNIQUE KEY uq_users_email (email),
     CONSTRAINT chk_users_role CHECK (role IN ('employee', 'subcontractor', 'client'))
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci /*T![auto_id_cache] AUTO_ID_CACHE=1 */;
 
 -- ---------- Lookups ----------
 
@@ -39,7 +42,7 @@ CREATE TABLE IF NOT EXISTS cost_categories (
     is_active     TINYINT NOT NULL DEFAULT 1,
     UNIQUE KEY uq_cost_categories_name (name),
     CONSTRAINT chk_cost_categories_active CHECK (is_active IN (0, 1))
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci /*T![auto_id_cache] AUTO_ID_CACHE=1 */;
 
 -- ---------- People ----------
 
@@ -59,7 +62,7 @@ CREATE TABLE IF NOT EXISTS clients (
     UNIQUE KEY uq_clients_user (user_id),
     CONSTRAINT fk_clients_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL,
     CONSTRAINT chk_clients_status CHECK (status IN ('Active', 'Inactive'))
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci /*T![auto_id_cache] AUTO_ID_CACHE=1 */;
 
 CREATE TABLE IF NOT EXISTS subcontractors (
     subcontractor_id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
@@ -77,7 +80,7 @@ CREATE TABLE IF NOT EXISTS subcontractors (
     UNIQUE KEY uq_subcontractors_user (user_id),
     CONSTRAINT fk_subcontractors_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL,
     CONSTRAINT chk_subcontractors_status CHECK (status IN ('Active', 'Inactive'))
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci /*T![auto_id_cache] AUTO_ID_CACHE=1 */;
 
 -- ---------- Estimates (RTM A3) ----------
 
@@ -95,7 +98,7 @@ CREATE TABLE IF NOT EXISTS estimates (
     CONSTRAINT fk_estimates_client FOREIGN KEY (client_id) REFERENCES clients(client_id),
     CONSTRAINT fk_estimates_creator FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL,
     CONSTRAINT chk_estimates_status CHECK (status IN ('Draft', 'Sent', 'Approved', 'Rejected', 'Converted'))
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci /*T![auto_id_cache] AUTO_ID_CACHE=1 */;
 
 CREATE TABLE IF NOT EXISTS estimate_line_items (
     line_item_id  INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
@@ -109,7 +112,7 @@ CREATE TABLE IF NOT EXISTS estimate_line_items (
     CONSTRAINT fk_estimate_lines_category FOREIGN KEY (category_id) REFERENCES cost_categories(category_id),
     CONSTRAINT chk_estimate_lines_quantity CHECK (quantity > 0),
     CONSTRAINT chk_estimate_lines_cost CHECK (unit_cost >= 0)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci /*T![auto_id_cache] AUTO_ID_CACHE=1 */;
 
 -- ---------- Projects (RTM A2, A4) ----------
 
@@ -139,7 +142,7 @@ CREATE TABLE IF NOT EXISTS projects (
     CONSTRAINT chk_projects_status CHECK (status IN ('Planning', 'In Progress', 'On Hold', 'Completed')),
     CONSTRAINT chk_projects_budget CHECK (budget_amount >= 0),
     CONSTRAINT chk_projects_progress CHECK (progress_percent BETWEEN 0 AND 100)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci /*T![auto_id_cache] AUTO_ID_CACHE=1 */;
 
 -- ---------- Invoices (RTM A5) ----------
 
@@ -157,7 +160,7 @@ CREATE TABLE IF NOT EXISTS invoices (
     KEY idx_invoices_project (project_id),
     CONSTRAINT fk_invoices_project FOREIGN KEY (project_id) REFERENCES projects(project_id),
     CONSTRAINT chk_invoices_status CHECK (status IN ('Draft', 'Unpaid', 'Paid'))
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci /*T![auto_id_cache] AUTO_ID_CACHE=1 */;
 
 CREATE TABLE IF NOT EXISTS invoice_line_items (
     invoice_line_item_id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
@@ -169,7 +172,7 @@ CREATE TABLE IF NOT EXISTS invoice_line_items (
     CONSTRAINT fk_invoice_lines_invoice FOREIGN KEY (invoice_id) REFERENCES invoices(invoice_id) ON DELETE CASCADE,
     CONSTRAINT chk_invoice_lines_quantity CHECK (quantity > 0),
     CONSTRAINT chk_invoice_lines_price CHECK (unit_price >= 0)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci /*T![auto_id_cache] AUTO_ID_CACHE=1 */;
 
 -- ---------- Job costs (RTM A6, A7) ----------
 
@@ -190,7 +193,7 @@ CREATE TABLE IF NOT EXISTS receipts (
     CONSTRAINT fk_receipts_category FOREIGN KEY (category_id) REFERENCES cost_categories(category_id),
     CONSTRAINT fk_receipts_uploader FOREIGN KEY (uploaded_by) REFERENCES users(id) ON DELETE SET NULL,
     CONSTRAINT chk_receipts_amount CHECK (amount >= 0)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci /*T![auto_id_cache] AUTO_ID_CACHE=1 */;
 
 -- Estimated cost per category for each project (the "Estimated" column on Job Costs).
 CREATE TABLE IF NOT EXISTS project_budget_items (
@@ -201,7 +204,7 @@ CREATE TABLE IF NOT EXISTS project_budget_items (
     CONSTRAINT fk_budget_project FOREIGN KEY (project_id) REFERENCES projects(project_id) ON DELETE CASCADE,
     CONSTRAINT fk_budget_category FOREIGN KEY (category_id) REFERENCES cost_categories(category_id),
     CONSTRAINT chk_budget_amount CHECK (estimated_amount >= 0)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci /*T![auto_id_cache] AUTO_ID_CACHE=1 */;
 
 -- ---------- Subcontractors (RTM A8) ----------
 
@@ -215,7 +218,7 @@ CREATE TABLE IF NOT EXISTS project_assignments (
     KEY idx_assignments_project (project_id),
     CONSTRAINT fk_assignments_project FOREIGN KEY (project_id) REFERENCES projects(project_id) ON DELETE CASCADE,
     CONSTRAINT fk_assignments_subcontractor FOREIGN KEY (subcontractor_id) REFERENCES subcontractors(subcontractor_id) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci /*T![auto_id_cache] AUTO_ID_CACHE=1 */;
 
 CREATE TABLE IF NOT EXISTS subcontractor_invoices (
     sub_invoice_id    INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
@@ -235,7 +238,7 @@ CREATE TABLE IF NOT EXISTS subcontractor_invoices (
     CONSTRAINT fk_sub_invoices_reviewer FOREIGN KEY (reviewed_by) REFERENCES users(id) ON DELETE SET NULL,
     CONSTRAINT chk_sub_invoices_amount CHECK (amount >= 0),
     CONSTRAINT chk_sub_invoices_status CHECK (status IN ('Pending Approval', 'Approved', 'Rejected', 'Paid'))
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci /*T![auto_id_cache] AUTO_ID_CACHE=1 */;
 
 -- ---------- Scheduling (RTM A11) ----------
 
@@ -256,7 +259,7 @@ CREATE TABLE IF NOT EXISTS tasks (
     CONSTRAINT fk_tasks_project FOREIGN KEY (project_id) REFERENCES projects(project_id) ON DELETE CASCADE,
     CONSTRAINT chk_tasks_priority CHECK (priority IN ('Low', 'Medium', 'High')),
     CONSTRAINT chk_tasks_status CHECK (status IN ('Not Started', 'In Progress', 'Completed'))
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci /*T![auto_id_cache] AUTO_ID_CACHE=1 */;
 
 -- ---------- Files (RTM A10, documents page) ----------
 
@@ -275,7 +278,7 @@ CREATE TABLE IF NOT EXISTS photos (
     CONSTRAINT fk_photos_project FOREIGN KEY (project_id) REFERENCES projects(project_id) ON DELETE CASCADE,
     CONSTRAINT fk_photos_uploader FOREIGN KEY (uploaded_by) REFERENCES users(id) ON DELETE SET NULL,
     CONSTRAINT fk_photos_task FOREIGN KEY (task_id) REFERENCES tasks(task_id) ON DELETE SET NULL
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci /*T![auto_id_cache] AUTO_ID_CACHE=1 */;
 
 CREATE TABLE IF NOT EXISTS documents (
     document_id         INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
@@ -290,7 +293,7 @@ CREATE TABLE IF NOT EXISTS documents (
     CONSTRAINT fk_documents_project FOREIGN KEY (project_id) REFERENCES projects(project_id) ON DELETE SET NULL,
     CONSTRAINT fk_documents_uploader FOREIGN KEY (uploaded_by) REFERENCES users(id) ON DELETE SET NULL,
     CONSTRAINT chk_documents_type CHECK (document_type IN ('Estimate', 'Invoice', 'Receipt', 'Contract', 'Other'))
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci /*T![auto_id_cache] AUTO_ID_CACHE=1 */;
 
 CREATE TABLE IF NOT EXISTS document_attachments (
     attachment_id      INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
@@ -299,7 +302,7 @@ CREATE TABLE IF NOT EXISTS document_attachments (
     file_path          VARCHAR(255) NOT NULL,
     KEY idx_document_attachments_document (document_id),
     CONSTRAINT fk_document_attachments_document FOREIGN KEY (document_id) REFERENCES documents(document_id) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci /*T![auto_id_cache] AUTO_ID_CACHE=1 */;
 
 -- ---------- Uploaded file contents (backend step 14) ----------
 
@@ -311,4 +314,4 @@ CREATE TABLE IF NOT EXISTS uploaded_files (
     content      LONGBLOB NOT NULL,
     size_bytes   INT NOT NULL,
     created_at   DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci /*T![auto_id_cache] AUTO_ID_CACHE=1 */;
