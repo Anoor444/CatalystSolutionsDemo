@@ -281,6 +281,7 @@ def init_app(app):
     app.teardown_appcontext(close_db)
     app.cli.add_command(reset_demo_data_command)
     app.cli.add_command(init_db_command)
+    create_database_if_missing()
     connection = connect()
     try:
         existing = {row[0] for row in connection.execute(
@@ -289,6 +290,24 @@ def init_app(app):
             create_tables(connection)
     finally:
         connection.close()
+
+
+def create_database_if_missing():
+    """Hosted MySQL (e.g. TiDB Cloud) starts with only a "test" database: create MYSQL_DATABASE
+    the first time, so there is nothing to set up by hand."""
+    settings = connection_settings()
+    name = settings.pop("database")
+    raw = mysql.connector.connect(**settings)
+    try:
+        cursor = raw.cursor()
+        cursor.execute("SELECT 1 FROM information_schema.schemata WHERE schema_name = %s", (name,))
+        if cursor.fetchone() is None:
+            safe = name.replace("`", "``")
+            cursor.execute(f"CREATE DATABASE IF NOT EXISTS `{safe}` "
+                           "CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci")
+        cursor.close()
+    finally:
+        raw.close()
 
 
 def create_tables(connection):

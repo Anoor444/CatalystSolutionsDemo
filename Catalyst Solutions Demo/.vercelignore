@@ -1,0 +1,15 @@
+# Files Vercel should not upload or deploy (only the app itself is needed online).
+# Local data and passwords
+instance/
+.env
+*.sqlite3
+*.db
+# Only used on your own computer
+tests/
+tools/
+setup_mysql.sql
+.pytest_cache/
+__pycache__/
+*.pyc
+venv/
+.venv/

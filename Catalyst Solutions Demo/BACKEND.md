@@ -49,8 +49,38 @@ If you only need the files (records already in MySQL, files still in `instance/*
 | `database.py` | Connection pool (one connection per request), table setup at startup, and the query functions pages use (`get_projects()`, `create_project()`, ...). |
 | `user_database.py` | Login accounts (the same `users` table, same database). |
 | `seed_data.py` | Sample data: the 12 projects, clients, project managers, cost categories, costs to date, 10 estimates, 9 invoices, 18 tasks, category budgets, expenses, client contact details and 11 subcontractors with project assignments. |
+| `public/static/` | CSS, JavaScript and images. They live in `public/` so Vercel serves them from its CDN at `/static/...`; Flask serves the same folder locally, so `url_for('static', ...)` works the same in both. |
+| `.vercelignore` | Files Vercel never uploads: `instance/`, `.env`, SQLite files, `tests/`, `tools/`. |
 | `api.py` | JSON API used by the Estimates and Invoices pages (see below). |
-| `static/js/api-client.js` | `apiRequest()`, the helper the pages use to call the API (sends the CSRF token). |
+| `public/static/js/api-client.js` | `apiRequest()`, the helper the pages use to call the API (sends the CSRF token). |
+
+## Deploying on Vercel (free)
+
+The site runs on Vercel's free Hobby plan with a free hosted MySQL database (TiDB Cloud Starter). Nothing is written to disk: data and uploaded files are in MySQL, and the secret key comes from an environment variable.
+
+1. **Database:** create a free TiDB Cloud Starter instance (pick AWS **us-east-1**, the same region as Vercel's default). Click **Connect**, choose **Public**, and click **Generate Password**. Write down the host, port (4000), user (looks like `xxxx.root`) and password.
+2. **Vercel:** sign in with GitHub, **Add New -> Project**, import the repository and set **Root Directory** to `Catalyst Solutions Demo`. Vercel detects Flask from `app.py`.
+3. **Environment Variables** (same screen, before **Deploy**):
+
+| Name | Value |
+|---|---|
+| `MYSQL_HOST` | host from TiDB's Connect dialog |
+| `MYSQL_PORT` | `4000` |
+| `MYSQL_USER` | user from TiDB (`xxxx.root`) |
+| `MYSQL_PASSWORD` | the generated password |
+| `MYSQL_DATABASE` | `catalyst_demo` |
+| `MYSQL_SSL` | `true` |
+| `FLASK_SECRET_KEY` | a long random value: `python -c "import secrets; print(secrets.token_hex(32))"` |
+
+Optional: the `MAIL_*` settings (see Forgot password) so reset emails are really sent; otherwise the reset link appears in Vercel's **Logs**.
+
+4. **Deploy.** On the first visit the app creates the `catalyst_demo` database, every table and the sample data by itself. Log in with the demo accounts.
+
+Every merge to `main` deploys again automatically. Notes:
+- Without `FLASK_SECRET_KEY` the site refuses to start on Vercel (logins would break otherwise). Changing it logs everyone out.
+- To put your local data online, point your `.env` at TiDB for a moment (same values as above) and run `python tools/sqlite_to_mysql.py --replace`, or copy tables with MySQL Workbench. Then put your `.env` back.
+- Uploads are limited to 4 MB (Vercel's limit is 4.5 MB per request).
+- Errors and printed messages are under the project's **Logs** tab in Vercel.
 
 ## Commands
 

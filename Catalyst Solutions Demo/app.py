@@ -26,6 +26,7 @@ from flask import (
     url_for,
 )
 from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
+from werkzeug.middleware.proxy_fix import ProxyFix
 from werkzeug.security import check_password_hash, generate_password_hash
 from werkzeug.utils import secure_filename
 
@@ -40,7 +41,10 @@ except ImportError:
 import database
 from user_database import DuplicateEmailError, UserDatabase
 
-app = Flask(__name__, instance_path=os.environ.get("APP_INSTANCE_PATH"))
+# CSS, JavaScript and images live in public/static: Vercel serves the public folder straight
+# from its CDN at /static/..., and Flask serves the same folder when you run it yourself.
+app = Flask(__name__, instance_path=os.environ.get("APP_INSTANCE_PATH"),
+            static_folder="public/static", static_url_path="/static")
 # Vercel refuses requests over 4.5 MB, so uploads are capped at 4 MB per request
 # (one file, or several files on the document page together).
 MAX_UPLOAD_MB = 4
@@ -64,10 +68,16 @@ ALLOWED_PHOTO_EXTENSIONS = {"jpg", "jpeg", "png", "gif", "webp"}
 DOCUMENT_TYPES = ("Estimate", "Invoice", "Receipt", "Contract", "Other")
 ROLES = ("employee", "subcontractor", "client")
 
-os.makedirs(app.instance_path, exist_ok=True)
-secret_key_file = os.path.join(app.instance_path, ".secret_key")
-app.secret_key = os.environ.get("FLASK_SECRET_KEY")
+# On Vercel (the VERCEL variable is set there) the files can't be written and there is no
+# instance folder, so the secret key must come from the FLASK_SECRET_KEY environment variable.
+# On your own computer a random key is created once in instance/.secret_key if it isn't set.
+ON_VERCEL = bool(os.environ.get("VERCEL"))
+app.secret_key = os.environ.get("FLASK_SECRET_KEY", "").strip()
 if not app.secret_key:
+    if ON_VERCEL:
+        raise RuntimeError("Set FLASK_SECRET_KEY in Vercel (Project Settings -> Environment Variables).")
+    os.makedirs(app.instance_path, exist_ok=True)
+    secret_key_file = os.path.join(app.instance_path, ".secret_key")
     try:
         with open(secret_key_file, "x", encoding="utf-8") as secret_file:
             secret_file.write(secrets.token_hex(32))
@@ -75,6 +85,12 @@ if not app.secret_key:
         pass
     with open(secret_key_file, encoding="utf-8") as secret_file:
         app.secret_key = secret_file.read().strip()
+
+if ON_VERCEL:
+    # Vercel serves the site over https and passes the real address in X-Forwarded-* headers;
+    # trust them so links in emails (password reset) are https://your-site, and cookies are secure.
+    app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
+    app.config["SESSION_COOKIE_SECURE"] = os.environ.get("COOKIE_SECURE", "true").lower() != "false"
 
 
 def initialize_user_database():
@@ -1058,8 +1074,8 @@ def change_password():
 
 
 # ---------- Documents and photos ----------
-# Records live in the documents/photos tables (database.py); files are saved in
-# instance/document_uploads and instance/photo_uploads. Employees see everything;
+# Records live in the documents/photos tables (database.py); the files themselves are
+# saved in the uploaded_files table. Employees see everything;
 # subcontractors see their assigned projects plus anything they uploaded.
 
 def _project_filter():
